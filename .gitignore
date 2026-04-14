@@ -1,5 +1,12 @@
 .cache
 .vscode
-build
+build/
 dependencies
 .DS_Store
+.pio/
+*.o
+*.pyc
+__pycache__/
+snap_anker_*.jpg
+boot_log.txt
+
