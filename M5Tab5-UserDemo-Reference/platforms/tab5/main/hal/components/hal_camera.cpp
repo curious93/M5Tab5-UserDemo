@@ -34,6 +34,14 @@
 #define CAMERA_HEIGHT 720
 
 static lv_obj_t* camera_canvas;
+ 
+// Vision Targets (-1.0 to 1.0)
+float vision_target_x = 0;
+float vision_target_y = 0;
+bool vision_detected = false;
+static uint8_t* last_frame_gray = NULL;
+#define VISION_W 160
+#define VISION_H 90
 // extern uint8_t* frame_buf;
 static QueueHandle_t queue_camera_ctrl = NULL;
 // 定义任务控制标志
@@ -321,6 +329,37 @@ void app_camera_display(void* arg)
         bsp_display_lock(0);
         lv_canvas_set_buffer(camera_canvas, img_show->data, CAMERA_WIDTH, CAMERA_HEIGHT, LV_COLOR_FORMAT_RGB565);
         bsp_display_unlock();
+
+        // Real Vision Logic: Motion Detection
+        if (last_frame_gray == NULL) {
+            last_frame_gray = (uint8_t*)heap_caps_malloc(VISION_W * VISION_H, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
+            if (last_frame_gray) memset(last_frame_gray, 0, VISION_W * VISION_H);
+        }
+
+        if (last_frame_gray) {
+            long sum_x = 0, sum_y = 0, count = 0;
+            uint16_t* current_data = (uint16_t*)img_show->data;
+            for (int y = 0; y < VISION_H; y++) {
+                for (int x = 0; x < VISION_W; x++) {
+                    int src_x = x * 8;
+                    int src_y = y * 8;
+                    uint16_t pixel = current_data[src_y * 1280 + src_x];
+                    uint8_t gray = (uint8_t)((((pixel >> 11) & 0x1F) << 3) + (((pixel >> 5) & 0x3F) << 2) + ((pixel & 0x1F) << 3)) >> 2;
+                    int diff = abs((int)gray - (int)last_frame_gray[y * VISION_W + x]);
+                    if (diff > 30) {
+                        sum_x += x; sum_y += y; count++;
+                    }
+                    last_frame_gray[y * VISION_W + x] = gray;
+                }
+            }
+            if (count > 50) {
+                float target_x = ((float)(sum_x / count) / VISION_W) * 2.0f - 1.0f;
+                float target_y = ((float)(sum_y / count) / VISION_H) * 2.0f - 1.0f;
+                vision_target_x = vision_target_x * 0.7f + target_x * 0.3f;
+                vision_target_y = vision_target_y * 0.7f + target_y * 0.3f;
+                vision_detected = true;
+            }
+        }
 
         if (ioctl(camera->fd, VIDIOC_QBUF, &buf) != 0) {
             ESP_LOGE(TAG, "failed to free video frame");

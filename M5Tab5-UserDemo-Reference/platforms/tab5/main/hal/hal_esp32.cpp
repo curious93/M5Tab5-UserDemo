@@ -48,8 +48,8 @@ void HalEsp32::init()
 {
     ESP_LOGI(_tag.c_str(), "init");
 
-    // mclog::tagInfo(_tag, "camera init");
-    // bsp_cam_osc_init();
+    ESP_LOGI(_tag.c_str(), "camera osc init");
+    bsp_cam_osc_init();
 
     ESP_LOGI(_tag.c_str(), "i2c init");
     bsp_i2c_init();
@@ -61,17 +61,19 @@ void HalEsp32::init()
     setChargeQcEnable(true);
     delay(50);
     setChargeEnable(true);
-    // setChargeEnable(false);
-
-    ESP_LOGI(_tag.c_str(), "i2c scan");
-    bsp_i2c_scan();
-
+ 
+    ESP_LOGI(_tag.c_str(), "camera hardware reset pulse");
+    bsp_camera_reset(true);
+    vTaskDelay(pdMS_TO_TICKS(100));
+    bsp_camera_reset(false);
+    vTaskDelay(pdMS_TO_TICKS(100));
+ 
     ESP_LOGI(_tag.c_str(), "codec init");
     delay(200);
     bsp_codec_init();
 
-    // mclog::tagInfo(_tag, "imu init");
-    // imu_init();
+    ESP_LOGI(_tag.c_str(), "imu init");
+    imu_init();
 
     ESP_LOGI(_tag.c_str(), "ina226 init");
     ina226.begin(i2c_bus_handle, 0x41);
@@ -104,12 +106,12 @@ void HalEsp32::init()
     lv_display_set_rotation(lvDisp, LV_DISPLAY_ROTATION_90);
     bsp_display_backlight_on();
 
-    // // Touchpad lvgl indev
-    // mclog::tagInfo(_tag, "create lvgl touchpad indev");
-    // lvTouchpad = lv_indev_create();
-    // lv_indev_set_type(lvTouchpad, LV_INDEV_TYPE_POINTER);
-    // lv_indev_set_read_cb(lvTouchpad, lvgl_read_cb);
-    // lv_indev_set_display(lvTouchpad, lvDisp);
+    // Touchpad lvgl indev
+    ESP_LOGI(_tag.c_str(), "create lvgl touchpad indev");
+    lv_indev_t* lvTouchpad = lv_indev_create();
+    lv_indev_set_type(lvTouchpad, LV_INDEV_TYPE_POINTER);
+    lv_indev_set_read_cb(lvTouchpad, lvgl_read_cb);
+    lv_indev_set_display(lvTouchpad, lvDisp);
 
     // mclog::tagInfo(_tag, "usb host init");
     // bsp_usb_host_start(BSP_USB_HOST_POWER_MODE_USB_DEV, true);

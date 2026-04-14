@@ -82,6 +82,7 @@ extern "C" {
 #endif
 
 esp_err_t bsp_cam_osc_init(void);
+void bsp_camera_reset(bool reset);
 
 /**************************************************************************************************
  *

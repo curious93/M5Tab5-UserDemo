@@ -32,6 +32,26 @@
 
 static const char* TAG = "M5STACK_TAB5";
 
+#define I2C_MASTER_TIMEOUT_MS 50
+
+// PI4IO registers
+#define PI4IO_REG_CHIP_RESET 0x01
+#define PI4IO_REG_IO_DIR     0x03
+#define PI4IO_REG_OUT_SET    0x05
+#define PI4IO_REG_OUT_H_IM   0x07
+#define PI4IO_REG_IN_DEF_STA 0x09
+#define PI4IO_REG_PULL_EN    0x0B
+#define PI4IO_REG_PULL_SEL   0x0D
+#define PI4IO_REG_IN_STA     0x0F
+#define PI4IO_REG_INT_MASK   0x11
+#define PI4IO_REG_IRQ_STA    0x13
+
+#define I2C_DEV_ADDR_PI4IOE1  0x43  // addr pin low
+#define I2C_DEV_ADDR_PI4IOE2  0x44  // addr pin high
+
+static i2c_master_dev_handle_t i2c_dev_handle_pi4ioe1;
+static i2c_master_dev_handle_t i2c_dev_handle_pi4ioe2;
+
 #if (BSP_CONFIG_NO_GRAPHIC_LIB == 0)
 static lv_indev_t* disp_indev = NULL;
 #endif  // (BSP_CONFIG_NO_GRAPHIC_LIB == 0)
@@ -89,6 +109,25 @@ esp_err_t bsp_cam_osc_init(void)
     }
 
     return ESP_OK;
+}
+ 
+void bsp_camera_reset(bool reset)
+{
+    uint8_t write_buf[2] = {0};
+    write_buf[0] = PI4IO_REG_OUT_SET;
+    // P6 is bit 6
+    if (reset) {
+        // Reset active (LOW)
+        write_buf[1] = 0b00000000; // Simplified: clear all for reset? No, let's be precise.
+        // Actually, let's read first or just bitwise. 
+        // For diagnostic, we set HIGH (released) as 0b01110110 in init.
+        // To RESET (LOW): we need to clear bit 6.
+        write_buf[1] = 0b00110110; 
+    } else {
+        // Reset released (HIGH)
+        write_buf[1] = 0b01110110;
+    }
+    i2c_master_transmit(i2c_dev_handle_pi4ioe1, write_buf, 2, I2C_MASTER_TIMEOUT_MS);
 }
 
 //==================================================================================
@@ -220,24 +259,6 @@ esp_err_t bsp_i2c_scan()
 //==================================================================================
 // I/O Exapnder PI4IOE5V6416
 //==================================================================================
-#define I2C_DEV_ADDR_PI4IOE1  0x43  // addr pin low
-#define I2C_DEV_ADDR_PI4IOE2  0x44  // addr pin high
-#define I2C_MASTER_TIMEOUT_MS 50
-
-static i2c_master_dev_handle_t i2c_dev_handle_pi4ioe1;
-static i2c_master_dev_handle_t i2c_dev_handle_pi4ioe2;
-
-// PI4IO registers
-#define PI4IO_REG_CHIP_RESET 0x01
-#define PI4IO_REG_IO_DIR     0x03
-#define PI4IO_REG_OUT_SET    0x05
-#define PI4IO_REG_OUT_H_IM   0x07
-#define PI4IO_REG_IN_DEF_STA 0x09
-#define PI4IO_REG_PULL_EN    0x0B
-#define PI4IO_REG_PULL_SEL   0x0D
-#define PI4IO_REG_IN_STA     0x0F
-#define PI4IO_REG_INT_MASK   0x11
-#define PI4IO_REG_IRQ_STA    0x13
 
 #define setbit(x, y) x |= (0x01 << y)
 #define clrbit(x, y) x &= ~(0x01 << y)
