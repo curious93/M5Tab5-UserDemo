@@ -22,7 +22,7 @@ echo "!"
 
 # 3. Snapshot machen (exakt nach dem Countdown)
 echo "Mache Snapshot mit imagesnap..."
-imagesnap -w 1.0 "$SNAP_FILE" > /dev/null 2>&1
+imagesnap -d "Anker PowerConf C200" -w 1.0 "$SNAP_FILE" > /dev/null 2>&1
 
 # 4. Sicherstellen, dass der Monitor fertig ist
 wait $MONITOR_PID 2>/dev/null || true

@@ -98,10 +98,10 @@ void HalEsp32::init()
                                  .buff_dma = true,
 #endif
                                  .buff_spiram = true,
-                                 .sw_rotate   = false,
+                                 .sw_rotate   = true,
                              }};
     lvDisp = bsp_display_start_with_config(&cfg);
-    // lv_display_set_rotation(lvDisp, LV_DISPLAY_ROTATION_90);
+    lv_display_set_rotation(lvDisp, LV_DISPLAY_ROTATION_90);
     bsp_display_backlight_on();
 
     // // Touchpad lvgl indev

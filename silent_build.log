@@ -1,0 +1,219 @@
+===========================================
+Starting silent build and deploy for Tab5
+===========================================
+[1/3] Cloning ESP-IDF 5.4.2 targeted version...
+Cloning into '/Users/nicolasvonbruck/esp/esp-idf-v5.4.2-tab5'...
+warning: refs/tags/v5.4.2 b887a94bc2f5288bf219c4c0021f2c32cfe6a9c1 is not a commit!
+Note: switching to 'f5c3654a1c2d2a01f7f67def7a0dc48e691f63c0'.
+
+You are in 'detached HEAD' state. You can look around, make experimental
+changes and commit them, and you can discard any commits you make in this
+state without impacting any branches by switching back to a branch.
+
+If you want to create a new branch to retain commits you create, you may
+do so (now or later) by using -c with the switch command. Example:
+
+  git switch -c <new-branch-name>
+
+Or undo this operation with:
+
+  git switch -
+
+Turn off this advice by setting config variable advice.detachedHead to false
+
+Updating files:  41% (6501/15855)Updating files:  42% (6660/15855)Updating files:  43% (6818/15855)Updating files:  44% (6977/15855)Updating files:  45% (7135/15855)Updating files:  46% (7294/15855)Updating files:  47% (7452/15855)Updating files:  48% (7611/15855)Updating files:  49% (7769/15855)Updating files:  50% (7928/15855)Updating files:  51% (8087/15855)Updating files:  52% (8245/15855)Updating files:  53% (8404/15855)Updating files:  54% (8562/15855)Updating files:  55% (8721/15855)Updating files:  56% (8879/15855)Updating files:  57% (9038/15855)Updating files:  58% (9196/15855)Updating files:  59% (9355/15855)Updating files:  60% (9513/15855)Updating files:  61% (9672/15855)Updating files:  62% (9831/15855)Updating files:  63% (9989/15855)Updating files:  64% (10148/15855)Updating files:  65% (10306/15855)Updating files:  66% (10465/15855)Updating files:  67% (10623/15855)Updating files:  68% (10782/15855)Updating files:  69% (10940/15855)Updating files:  70% (11099/15855)Updating files:  71% (11258/15855)Updating files:  72% (11416/15855)Updating files:  73% (11575/15855)Updating files:  74% (11733/15855)Updating files:  74% (11853/15855)Updating files:  75% (11892/15855)Updating files:  76% (12050/15855)Updating files:  77% (12209/15855)Updating files:  78% (12367/15855)Updating files:  79% (12526/15855)Updating files:  80% (12684/15855)Updating files:  81% (12843/15855)Updating files:  82% (13002/15855)Updating files:  83% (13160/15855)Updating files:  84% (13319/15855)Updating files:  85% (13477/15855)Updating files:  86% (13636/15855)Updating files:  87% (13794/15855)Updating files:  88% (13953/15855)Updating files:  89% (14111/15855)Updating files:  90% (14270/15855)Updating files:  91% (14429/15855)Updating files:  92% (14587/15855)Updating files:  93% (14746/15855)Updating files:  94% (14904/15855)Updating files:  95% (15063/15855)Updating files:  96% (15221/15855)Updating files:  97% (15380/15855)Updating files:  98% (15538/15855)Updating files:  99% (15697/15855)Updating files: 100% (15855/15855)Updating files: 100% (15855/15855), done.
+Submodule 'components/bootloader/subproject/components/micro-ecc/micro-ecc' (https://github.com/kmackay/micro-ecc.git) registered for path 'components/bootloader/subproject/components/micro-ecc/micro-ecc'
+Submodule 'components/bt/controller/lib_esp32' (https://github.com/espressif/esp32-bt-lib.git) registered for path 'components/bt/controller/lib_esp32'
+Submodule 'components/bt/controller/lib_esp32c2/esp32c2-bt-lib' (https://github.com/espressif/esp32c2-bt-lib.git) registered for path 'components/bt/controller/lib_esp32c2/esp32c2-bt-lib'
+Submodule 'components/bt/controller/lib_esp32c3_family' (https://github.com/espressif/esp32c3-bt-lib.git) registered for path 'components/bt/controller/lib_esp32c3_family'
+Submodule 'components/bt/controller/lib_esp32c5/esp32c5-bt-lib' (https://github.com/espressif/esp32c5-bt-lib.git) registered for path 'components/bt/controller/lib_esp32c5/esp32c5-bt-lib'
+Submodule 'components/bt/controller/lib_esp32c6/esp32c6-bt-lib' (https://github.com/espressif/esp32c6-bt-lib.git) registered for path 'components/bt/controller/lib_esp32c6/esp32c6-bt-lib'
+Submodule 'components/bt/controller/lib_esp32h2/esp32h2-bt-lib' (https://github.com/espressif/esp32h2-bt-lib.git) registered for path 'components/bt/controller/lib_esp32h2/esp32h2-bt-lib'
+Submodule 'components/bt/esp_ble_mesh/lib/lib' (https://github.com/espressif/esp-ble-mesh-lib.git) registered for path 'components/bt/esp_ble_mesh/lib/lib'
+Submodule 'components/bt/host/nimble/nimble' (https://github.com/espressif/esp-nimble.git) registered for path 'components/bt/host/nimble/nimble'
+Submodule 'components/cmock/CMock' (https://github.com/ThrowTheSwitch/CMock.git) registered for path 'components/cmock/CMock'
+Submodule 'components/esp_coex/lib' (https://github.com/espressif/esp-coex-lib.git) registered for path 'components/esp_coex/lib'
+Submodule 'components/esp_phy/lib' (https://github.com/espressif/esp-phy-lib.git) registered for path 'components/esp_phy/lib'
+Submodule 'components/esp_wifi/lib' (https://github.com/espressif/esp32-wifi-lib.git) registered for path 'components/esp_wifi/lib'
+Submodule 'components/heap/tlsf' (https://github.com/espressif/tlsf.git) registered for path 'components/heap/tlsf'
+Submodule 'components/json/cJSON' (https://github.com/DaveGamble/cJSON.git) registered for path 'components/json/cJSON'
+Submodule 'components/lwip/lwip' (https://github.com/espressif/esp-lwip.git) registered for path 'components/lwip/lwip'
+Submodule 'components/mbedtls/mbedtls' (https://github.com/espressif/mbedtls.git) registered for path 'components/mbedtls/mbedtls'
+Submodule 'components/mqtt/esp-mqtt' (https://github.com/espressif/esp-mqtt.git) registered for path 'components/mqtt/esp-mqtt'
+Submodule 'components/openthread/lib' (https://github.com/espressif/esp-thread-lib.git) registered for path 'components/openthread/lib'
+Submodule 'components/openthread/openthread' (https://github.com/espressif/openthread.git) registered for path 'components/openthread/openthread'
+Submodule 'components/protobuf-c/protobuf-c' (https://github.com/protobuf-c/protobuf-c.git) registered for path 'components/protobuf-c/protobuf-c'
+Submodule 'components/spiffs/spiffs' (https://github.com/pellepl/spiffs.git) registered for path 'components/spiffs/spiffs'
+Submodule 'components/unity/unity' (https://github.com/ThrowTheSwitch/Unity.git) registered for path 'components/unity/unity'
+Cloning into '/Users/nicolasvonbruck/esp/esp-idf-v5.4.2-tab5/components/bootloader/subproject/components/micro-ecc/micro-ecc'...
+Cloning into '/Users/nicolasvonbruck/esp/esp-idf-v5.4.2-tab5/components/bt/controller/lib_esp32'...
+Cloning into '/Users/nicolasvonbruck/esp/esp-idf-v5.4.2-tab5/components/bt/controller/lib_esp32c2/esp32c2-bt-lib'...
+Cloning into '/Users/nicolasvonbruck/esp/esp-idf-v5.4.2-tab5/components/bt/controller/lib_esp32c3_family'...
+Cloning into '/Users/nicolasvonbruck/esp/esp-idf-v5.4.2-tab5/components/bt/controller/lib_esp32c5/esp32c5-bt-lib'...
+Cloning into '/Users/nicolasvonbruck/esp/esp-idf-v5.4.2-tab5/components/bt/controller/lib_esp32c6/esp32c6-bt-lib'...
+Cloning into '/Users/nicolasvonbruck/esp/esp-idf-v5.4.2-tab5/components/bt/controller/lib_esp32h2/esp32h2-bt-lib'...
+Cloning into '/Users/nicolasvonbruck/esp/esp-idf-v5.4.2-tab5/components/bt/esp_ble_mesh/lib/lib'...
+Cloning into '/Users/nicolasvonbruck/esp/esp-idf-v5.4.2-tab5/components/bt/host/nimble/nimble'...
+Cloning into '/Users/nicolasvonbruck/esp/esp-idf-v5.4.2-tab5/components/cmock/CMock'...
+Cloning into '/Users/nicolasvonbruck/esp/esp-idf-v5.4.2-tab5/components/esp_coex/lib'...
+Cloning into '/Users/nicolasvonbruck/esp/esp-idf-v5.4.2-tab5/components/esp_phy/lib'...
+Cloning into '/Users/nicolasvonbruck/esp/esp-idf-v5.4.2-tab5/components/esp_wifi/lib'...
+Cloning into '/Users/nicolasvonbruck/esp/esp-idf-v5.4.2-tab5/components/heap/tlsf'...
+Cloning into '/Users/nicolasvonbruck/esp/esp-idf-v5.4.2-tab5/components/json/cJSON'...
+Cloning into '/Users/nicolasvonbruck/esp/esp-idf-v5.4.2-tab5/components/lwip/lwip'...
+Cloning into '/Users/nicolasvonbruck/esp/esp-idf-v5.4.2-tab5/components/mbedtls/mbedtls'...
+Cloning into '/Users/nicolasvonbruck/esp/esp-idf-v5.4.2-tab5/components/mqtt/esp-mqtt'...
+Cloning into '/Users/nicolasvonbruck/esp/esp-idf-v5.4.2-tab5/components/openthread/lib'...
+Cloning into '/Users/nicolasvonbruck/esp/esp-idf-v5.4.2-tab5/components/openthread/openthread'...
+Cloning into '/Users/nicolasvonbruck/esp/esp-idf-v5.4.2-tab5/components/protobuf-c/protobuf-c'...
+Cloning into '/Users/nicolasvonbruck/esp/esp-idf-v5.4.2-tab5/components/spiffs/spiffs'...
+Cloning into '/Users/nicolasvonbruck/esp/esp-idf-v5.4.2-tab5/components/unity/unity'...
+Submodule path 'components/bootloader/subproject/components/micro-ecc/micro-ecc': checked out '24c60e243580c7868f4334a1ba3123481fe1aa48'
+Submodule path 'components/bt/controller/lib_esp32': checked out '6d007b7167146b31256b29fed31e04dc46989885'
+Submodule path 'components/bt/controller/lib_esp32c2/esp32c2-bt-lib': checked out '06c5ef1481e6e5ff9308d6abe9c1e576d60c946f'
+Submodule path 'components/bt/controller/lib_esp32c3_family': checked out '72599d583c232ea78d6461b5b502426c6e5a1ec9'
+Submodule path 'components/bt/controller/lib_esp32c5/esp32c5-bt-lib': checked out '19bce59850e593a1e0231a1f051e24a1532c38d6'
+Submodule path 'components/bt/controller/lib_esp32c6/esp32c6-bt-lib': checked out '841466ff3cf6635bf061c18e836807ee7f99ce78'
+Submodule path 'components/bt/controller/lib_esp32h2/esp32h2-bt-lib': checked out 'bd09406c74d135d1d4e68c5e578540a8bcffbcac'
+From https://github.com/espressif/esp-ble-mesh-lib
+ * branch            a62a98132cdec59d2f2745da7b0598964b38bdae -> FETCH_HEAD
+Submodule path 'components/bt/esp_ble_mesh/lib/lib': checked out 'a62a98132cdec59d2f2745da7b0598964b38bdae'
+Submodule path 'components/bt/host/nimble/nimble': checked out '0225775e49669cd4f070400908f73718bddce83b'
+Submodule path 'components/cmock/CMock': checked out 'eeecc49ce8af123cf8ad40efdb9673e37b56230f'
+Submodule 'vendor/c_exception' (https://github.com/throwtheswitch/cexception.git) registered for path 'components/cmock/CMock/vendor/c_exception'
+Submodule 'vendor/unity' (https://github.com/throwtheswitch/unity.git) registered for path 'components/cmock/CMock/vendor/unity'
+Cloning into '/Users/nicolasvonbruck/esp/esp-idf-v5.4.2-tab5/components/cmock/CMock/vendor/c_exception'...
+Cloning into '/Users/nicolasvonbruck/esp/esp-idf-v5.4.2-tab5/components/cmock/CMock/vendor/unity'...
+Submodule path 'components/cmock/CMock/vendor/c_exception': checked out '71b47be7c950f1bf5f7e5303779fa99a16224bb6'
+Submodule path 'components/cmock/CMock/vendor/unity': checked out 'cf949f45ca6d172a177b00da21310607b97bc7a7'
+Submodule path 'components/esp_coex/lib': checked out 'cb6667841f63457246d56a9170f3409917e9d5a8'
+Submodule path 'components/esp_phy/lib': checked out 'fc76520d481fc3d08cbc001ef47804a4457fffd7'
+From https://github.com/espressif/esp32-wifi-lib
+ * branch              206fe3e13e788b5fad8be6d39b5d9742e4bd9985 -> FETCH_HEAD
+Submodule path 'components/esp_wifi/lib': checked out '206fe3e13e788b5fad8be6d39b5d9742e4bd9985'
+Submodule path 'components/heap/tlsf': checked out '2867f6883a12920b1969ff9624c0ab0e4185c2ce'
+Submodule path 'components/json/cJSON': checked out '8f2beb57ddad1f94bed899790b00f46df893ccac'
+From https://github.com/espressif/esp-lwip
+ * branch              fa4dffdfac52587a26c1f29258376df750cf8474 -> FETCH_HEAD
+Submodule path 'components/lwip/lwip': checked out 'fa4dffdfac52587a26c1f29258376df750cf8474'
+From https://github.com/espressif/mbedtls
+ * branch                601990b1d81510a135da9bb0476d6ed3cb8c011b -> FETCH_HEAD
+Submodule path 'components/mbedtls/mbedtls': checked out '601990b1d81510a135da9bb0476d6ed3cb8c011b'
+Submodule path 'components/mqtt/esp-mqtt': checked out 'cac1552e62b0474c162547b7cce345d7cd1aecfe'
+From https://github.com/espressif/esp-thread-lib
+ * branch            d4d4738d0d757dbcead167179ecf829a8c1d477b -> FETCH_HEAD
+Submodule path 'components/openthread/lib': checked out 'd4d4738d0d757dbcead167179ecf829a8c1d477b'
+Submodule path 'components/openthread/openthread': checked out 'ec2b0d487356d2955346457a6515201039140037'
+Submodule path 'components/protobuf-c/protobuf-c': checked out 'abc67a11c6db271bedbb9f58be85d6f4e2ea8389'
+Submodule path 'components/spiffs/spiffs': checked out '0dbb3f71c5f6fae3747a9d935372773762baf852'
+Submodule path 'components/unity/unity': checked out 'bf560290f6020737eafaa8b5cbd2177c3956c03f'
+Installing ESP-IDF tools...
+INFO: Using IDF_PATH '/Users/nicolasvonbruck/esp/esp-idf-v5.4.2-tab5' for installation.
+Detecting the Python interpreter
+Checking "python3" ...
+Python 3.9.6
+"python3" has been detected
+Checking Python compatibility
+Installing ESP-IDF tools
+Updating /Users/nicolasvonbruck/.espressif/idf-env.json
+Selected targets are: esp32p4
+Current system platform: macos-arm64
+Installing tools: riscv32-esp-elf-gdb, riscv32-esp-elf, openocd-esp32, esp-rom-elfs
+Skipping riscv32-esp-elf-gdb@14.2_20240403 (already installed)
+Skipping riscv32-esp-elf@esp-14.2.0_20241119 (already installed)
+Skipping openocd-esp32@v0.12.0-esp32-20250422 (already installed)
+Skipping esp-rom-elfs@20241011 (already installed)
+Installing Python environment and packages
+Python 3.9.6
+pip 26.0.1 from /Users/nicolasvonbruck/.espressif/python_env/idf5.4_py3.9_env/lib/python3.9/site-packages/pip (python 3.9)
+Downloading https://dl.espressif.com/dl/esp-idf/espidf.constraints.v5.4.txt
+Destination: /Users/nicolasvonbruck/.espressif/espidf.constraints.v5.4.txt.tmp
+0%100%Done
+Requirement already satisfied: pip in /Users/nicolasvonbruck/.espressif/python_env/idf5.4_py3.9_env/lib/python3.9/site-packages (26.0.1)
+Requirement already satisfied: setuptools in /Users/nicolasvonbruck/.espressif/python_env/idf5.4_py3.9_env/lib/python3.9/site-packages (82.0.1)
+Looking in indexes: https://pypi.org/simple, https://dl.espressif.com/pypi
+Ignoring importlib_metadata: markers 'python_version < "3.8"' don't match your environment
+Requirement already satisfied: setuptools in /Users/nicolasvonbruck/.espressif/python_env/idf5.4_py3.9_env/lib/python3.9/site-packages (from -r /Users/nicolasvonbruck/esp/esp-idf-v5.4.2-tab5/tools/requirements/requirements.core.txt (line 7)) (82.0.1)
+Requirement already satisfied: packaging in /Users/nicolasvonbruck/.espressif/python_env/idf5.4_py3.9_env/lib/python3.9/site-packages (from -r /Users/nicolasvonbruck/esp/esp-idf-v5.4.2-tab5/tools/requirements/requirements.core.txt (line 8)) (26.0)
+Requirement already satisfied: click in /Users/nicolasvonbruck/.espressif/python_env/idf5.4_py3.9_env/lib/python3.9/site-packages (from -r /Users/nicolasvonbruck/esp/esp-idf-v5.4.2-tab5/tools/requirements/requirements.core.txt (line 11)) (8.1.8)
+Requirement already satisfied: pyserial in /Users/nicolasvonbruck/.espressif/python_env/idf5.4_py3.9_env/lib/python3.9/site-packages (from -r /Users/nicolasvonbruck/esp/esp-idf-v5.4.2-tab5/tools/requirements/requirements.core.txt (line 12)) (3.5)
+Requirement already satisfied: cryptography in /Users/nicolasvonbruck/.espressif/python_env/idf5.4_py3.9_env/lib/python3.9/site-packages (from -r /Users/nicolasvonbruck/esp/esp-idf-v5.4.2-tab5/tools/requirements/requirements.core.txt (line 13)) (44.0.3)
+Requirement already satisfied: pyparsing in /Users/nicolasvonbruck/.espressif/python_env/idf5.4_py3.9_env/lib/python3.9/site-packages (from -r /Users/nicolasvonbruck/esp/esp-idf-v5.4.2-tab5/tools/requirements/requirements.core.txt (line 14)) (3.2.5)
+Requirement already satisfied: pyelftools in /Users/nicolasvonbruck/.espressif/python_env/idf5.4_py3.9_env/lib/python3.9/site-packages (from -r /Users/nicolasvonbruck/esp/esp-idf-v5.4.2-tab5/tools/requirements/requirements.core.txt (line 15)) (0.32)
+Requirement already satisfied: idf-component-manager in /Users/nicolasvonbruck/.espressif/python_env/idf5.4_py3.9_env/lib/python3.9/site-packages (from -r /Users/nicolasvonbruck/esp/esp-idf-v5.4.2-tab5/tools/requirements/requirements.core.txt (line 16)) (2.4.9)
+Requirement already satisfied: esp-coredump in /Users/nicolasvonbruck/.espressif/python_env/idf5.4_py3.9_env/lib/python3.9/site-packages (from -r /Users/nicolasvonbruck/esp/esp-idf-v5.4.2-tab5/tools/requirements/requirements.core.txt (line 17)) (1.16.0)
+Requirement already satisfied: esptool in /Users/nicolasvonbruck/.espressif/python_env/idf5.4_py3.9_env/lib/python3.9/site-packages (from -r /Users/nicolasvonbruck/esp/esp-idf-v5.4.2-tab5/tools/requirements/requirements.core.txt (line 18)) (4.11.0)
+Requirement already satisfied: esp-idf-kconfig in /Users/nicolasvonbruck/.espressif/python_env/idf5.4_py3.9_env/lib/python3.9/site-packages (from -r /Users/nicolasvonbruck/esp/esp-idf-v5.4.2-tab5/tools/requirements/requirements.core.txt (line 19)) (2.5.3)
+Requirement already satisfied: esp-idf-monitor in /Users/nicolasvonbruck/.espressif/python_env/idf5.4_py3.9_env/lib/python3.9/site-packages (from -r /Users/nicolasvonbruck/esp/esp-idf-v5.4.2-tab5/tools/requirements/requirements.core.txt (line 20)) (1.9.0)
+Requirement already satisfied: esp-idf-nvs-partition-gen in /Users/nicolasvonbruck/.espressif/python_env/idf5.4_py3.9_env/lib/python3.9/site-packages (from -r /Users/nicolasvonbruck/esp/esp-idf-v5.4.2-tab5/tools/requirements/requirements.core.txt (line 21)) (0.1.9)
+Requirement already satisfied: esp-idf-size in /Users/nicolasvonbruck/.espressif/python_env/idf5.4_py3.9_env/lib/python3.9/site-packages (from -r /Users/nicolasvonbruck/esp/esp-idf-v5.4.2-tab5/tools/requirements/requirements.core.txt (line 22)) (1.7.1)
+Requirement already satisfied: esp-idf-panic-decoder in /Users/nicolasvonbruck/.espressif/python_env/idf5.4_py3.9_env/lib/python3.9/site-packages (from -r /Users/nicolasvonbruck/esp/esp-idf-v5.4.2-tab5/tools/requirements/requirements.core.txt (line 23)) (1.4.2)
+Requirement already satisfied: pyclang in /Users/nicolasvonbruck/.espressif/python_env/idf5.4_py3.9_env/lib/python3.9/site-packages (from -r /Users/nicolasvonbruck/esp/esp-idf-v5.4.2-tab5/tools/requirements/requirements.core.txt (line 24)) (0.6.3)
+Requirement already satisfied: construct in /Users/nicolasvonbruck/.espressif/python_env/idf5.4_py3.9_env/lib/python3.9/site-packages (from -r /Users/nicolasvonbruck/esp/esp-idf-v5.4.2-tab5/tools/requirements/requirements.core.txt (line 25)) (2.10.70)
+Requirement already satisfied: rich in /Users/nicolasvonbruck/.espressif/python_env/idf5.4_py3.9_env/lib/python3.9/site-packages (from -r /Users/nicolasvonbruck/esp/esp-idf-v5.4.2-tab5/tools/requirements/requirements.core.txt (line 26)) (14.3.3)
+Collecting rich (from -r /Users/nicolasvonbruck/esp/esp-idf-v5.4.2-tab5/tools/requirements/requirements.core.txt (line 26))
+  Using cached rich-15.0.0-py3-none-any.whl.metadata (18 kB)
+Requirement already satisfied: psutil in /Users/nicolasvonbruck/.espressif/python_env/idf5.4_py3.9_env/lib/python3.9/site-packages (from -r /Users/nicolasvonbruck/esp/esp-idf-v5.4.2-tab5/tools/requirements/requirements.core.txt (line 27)) (7.2.2)
+Requirement already satisfied: freertos_gdb in /Users/nicolasvonbruck/.espressif/python_env/idf5.4_py3.9_env/lib/python3.9/site-packages (from -r /Users/nicolasvonbruck/esp/esp-idf-v5.4.2-tab5/tools/requirements/requirements.core.txt (line 30)) (1.0.4)
+Requirement already satisfied: cffi>=1.12 in /Users/nicolasvonbruck/.espressif/python_env/idf5.4_py3.9_env/lib/python3.9/site-packages (from cryptography->-r /Users/nicolasvonbruck/esp/esp-idf-v5.4.2-tab5/tools/requirements/requirements.core.txt (line 13)) (2.0.0)
+Requirement already satisfied: colorama in /Users/nicolasvonbruck/.espressif/python_env/idf5.4_py3.9_env/lib/python3.9/site-packages (from idf-component-manager->-r /Users/nicolasvonbruck/esp/esp-idf-v5.4.2-tab5/tools/requirements/requirements.core.txt (line 16)) (0.4.6)
+Requirement already satisfied: ruamel.yaml in /Users/nicolasvonbruck/.espressif/python_env/idf5.4_py3.9_env/lib/python3.9/site-packages (from idf-component-manager->-r /Users/nicolasvonbruck/esp/esp-idf-v5.4.2-tab5/tools/requirements/requirements.core.txt (line 16)) (0.19.1)
+Requirement already satisfied: requests in /Users/nicolasvonbruck/.espressif/python_env/idf5.4_py3.9_env/lib/python3.9/site-packages (from idf-component-manager->-r /Users/nicolasvonbruck/esp/esp-idf-v5.4.2-tab5/tools/requirements/requirements.core.txt (line 16)) (2.32.5)
+Requirement already satisfied: requests-file in /Users/nicolasvonbruck/.espressif/python_env/idf5.4_py3.9_env/lib/python3.9/site-packages (from idf-component-manager->-r /Users/nicolasvonbruck/esp/esp-idf-v5.4.2-tab5/tools/requirements/requirements.core.txt (line 16)) (3.0.1)
+Requirement already satisfied: requests-toolbelt in /Users/nicolasvonbruck/.espressif/python_env/idf5.4_py3.9_env/lib/python3.9/site-packages (from idf-component-manager->-r /Users/nicolasvonbruck/esp/esp-idf-v5.4.2-tab5/tools/requirements/requirements.core.txt (line 16)) (1.0.0)
+Requirement already satisfied: tqdm in /Users/nicolasvonbruck/.espressif/python_env/idf5.4_py3.9_env/lib/python3.9/site-packages (from idf-component-manager->-r /Users/nicolasvonbruck/esp/esp-idf-v5.4.2-tab5/tools/requirements/requirements.core.txt (line 16)) (4.67.3)
+Requirement already satisfied: jsonref in /Users/nicolasvonbruck/.espressif/python_env/idf5.4_py3.9_env/lib/python3.9/site-packages (from idf-component-manager->-r /Users/nicolasvonbruck/esp/esp-idf-v5.4.2-tab5/tools/requirements/requirements.core.txt (line 16)) (1.1.0)
+Requirement already satisfied: pydantic!=2.12.0 in /Users/nicolasvonbruck/.espressif/python_env/idf5.4_py3.9_env/lib/python3.9/site-packages (from idf-component-manager->-r /Users/nicolasvonbruck/esp/esp-idf-v5.4.2-tab5/tools/requirements/requirements.core.txt (line 16)) (2.12.5)
+Requirement already satisfied: pydantic-core in /Users/nicolasvonbruck/.espressif/python_env/idf5.4_py3.9_env/lib/python3.9/site-packages (from idf-component-manager->-r /Users/nicolasvonbruck/esp/esp-idf-v5.4.2-tab5/tools/requirements/requirements.core.txt (line 16)) (2.41.5)
+Requirement already satisfied: pydantic-settings in /Users/nicolasvonbruck/.espressif/python_env/idf5.4_py3.9_env/lib/python3.9/site-packages (from idf-component-manager->-r /Users/nicolasvonbruck/esp/esp-idf-v5.4.2-tab5/tools/requirements/requirements.core.txt (line 16)) (2.11.0)
+Requirement already satisfied: typing-extensions in /Users/nicolasvonbruck/.espressif/python_env/idf5.4_py3.9_env/lib/python3.9/site-packages (from idf-component-manager->-r /Users/nicolasvonbruck/esp/esp-idf-v5.4.2-tab5/tools/requirements/requirements.core.txt (line 16)) (4.15.0)
+Requirement already satisfied: pygdbmi>=0.9.0.2 in /Users/nicolasvonbruck/.espressif/python_env/idf5.4_py3.9_env/lib/python3.9/site-packages (from esp-coredump->-r /Users/nicolasvonbruck/esp/esp-idf-v5.4.2-tab5/tools/requirements/requirements.core.txt (line 17)) (0.11.0.0)
+Requirement already satisfied: bitstring!=4.2.0,>=3.1.6 in /Users/nicolasvonbruck/.espressif/python_env/idf5.4_py3.9_env/lib/python3.9/site-packages (from esptool->-r /Users/nicolasvonbruck/esp/esp-idf-v5.4.2-tab5/tools/requirements/requirements.core.txt (line 18)) (4.4.0)
+Requirement already satisfied: ecdsa>=0.16.0 in /Users/nicolasvonbruck/.espressif/python_env/idf5.4_py3.9_env/lib/python3.9/site-packages (from esptool->-r /Users/nicolasvonbruck/esp/esp-idf-v5.4.2-tab5/tools/requirements/requirements.core.txt (line 18)) (0.19.2)
+Requirement already satisfied: reedsolo<1.8,>=1.5.3 in /Users/nicolasvonbruck/.espressif/python_env/idf5.4_py3.9_env/lib/python3.9/site-packages (from esptool->-r /Users/nicolasvonbruck/esp/esp-idf-v5.4.2-tab5/tools/requirements/requirements.core.txt (line 18)) (1.7.0)
+Requirement already satisfied: PyYAML>=5.1 in /Users/nicolasvonbruck/.espressif/python_env/idf5.4_py3.9_env/lib/python3.9/site-packages (from esptool->-r /Users/nicolasvonbruck/esp/esp-idf-v5.4.2-tab5/tools/requirements/requirements.core.txt (line 18)) (6.0.3)
+Requirement already satisfied: intelhex in /Users/nicolasvonbruck/.espressif/python_env/idf5.4_py3.9_env/lib/python3.9/site-packages (from esptool->-r /Users/nicolasvonbruck/esp/esp-idf-v5.4.2-tab5/tools/requirements/requirements.core.txt (line 18)) (2.3.0)
+Requirement already satisfied: argcomplete>=3 in /Users/nicolasvonbruck/.espressif/python_env/idf5.4_py3.9_env/lib/python3.9/site-packages (from esptool->-r /Users/nicolasvonbruck/esp/esp-idf-v5.4.2-tab5/tools/requirements/requirements.core.txt (line 18)) (3.6.3)
+Requirement already satisfied: markdown-it-py>=2.2.0 in /Users/nicolasvonbruck/.espressif/python_env/idf5.4_py3.9_env/lib/python3.9/site-packages (from rich->-r /Users/nicolasvonbruck/esp/esp-idf-v5.4.2-tab5/tools/requirements/requirements.core.txt (line 26)) (3.0.0)
+Requirement already satisfied: pygments<3.0.0,>=2.13.0 in /Users/nicolasvonbruck/.espressif/python_env/idf5.4_py3.9_env/lib/python3.9/site-packages (from rich->-r /Users/nicolasvonbruck/esp/esp-idf-v5.4.2-tab5/tools/requirements/requirements.core.txt (line 26)) (2.20.0)
+Requirement already satisfied: bitarray<4.0,>=3.0.0 in /Users/nicolasvonbruck/.espressif/python_env/idf5.4_py3.9_env/lib/python3.9/site-packages (from bitstring!=4.2.0,>=3.1.6->esptool->-r /Users/nicolasvonbruck/esp/esp-idf-v5.4.2-tab5/tools/requirements/requirements.core.txt (line 18)) (3.8.1)
+Requirement already satisfied: tibs<0.6,>=0.5.6 in /Users/nicolasvonbruck/.espressif/python_env/idf5.4_py3.9_env/lib/python3.9/site-packages (from bitstring!=4.2.0,>=3.1.6->esptool->-r /Users/nicolasvonbruck/esp/esp-idf-v5.4.2-tab5/tools/requirements/requirements.core.txt (line 18)) (0.5.7)
+Requirement already satisfied: pycparser in /Users/nicolasvonbruck/.espressif/python_env/idf5.4_py3.9_env/lib/python3.9/site-packages (from cffi>=1.12->cryptography->-r /Users/nicolasvonbruck/esp/esp-idf-v5.4.2-tab5/tools/requirements/requirements.core.txt (line 13)) (2.23)
+Requirement already satisfied: six>=1.9.0 in /Users/nicolasvonbruck/.espressif/python_env/idf5.4_py3.9_env/lib/python3.9/site-packages (from ecdsa>=0.16.0->esptool->-r /Users/nicolasvonbruck/esp/esp-idf-v5.4.2-tab5/tools/requirements/requirements.core.txt (line 18)) (1.17.0)
+Requirement already satisfied: mdurl~=0.1 in /Users/nicolasvonbruck/.espressif/python_env/idf5.4_py3.9_env/lib/python3.9/site-packages (from markdown-it-py>=2.2.0->rich->-r /Users/nicolasvonbruck/esp/esp-idf-v5.4.2-tab5/tools/requirements/requirements.core.txt (line 26)) (0.1.2)
+Requirement already satisfied: annotated-types>=0.6.0 in /Users/nicolasvonbruck/.espressif/python_env/idf5.4_py3.9_env/lib/python3.9/site-packages (from pydantic!=2.12.0->idf-component-manager->-r /Users/nicolasvonbruck/esp/esp-idf-v5.4.2-tab5/tools/requirements/requirements.core.txt (line 16)) (0.7.0)
+Requirement already satisfied: typing-inspection>=0.4.2 in /Users/nicolasvonbruck/.espressif/python_env/idf5.4_py3.9_env/lib/python3.9/site-packages (from pydantic!=2.12.0->idf-component-manager->-r /Users/nicolasvonbruck/esp/esp-idf-v5.4.2-tab5/tools/requirements/requirements.core.txt (line 16)) (0.4.2)
+Requirement already satisfied: python-dotenv>=0.21.0 in /Users/nicolasvonbruck/.espressif/python_env/idf5.4_py3.9_env/lib/python3.9/site-packages (from pydantic-settings->idf-component-manager->-r /Users/nicolasvonbruck/esp/esp-idf-v5.4.2-tab5/tools/requirements/requirements.core.txt (line 16)) (1.2.1)
+Requirement already satisfied: charset_normalizer<4,>=2 in /Users/nicolasvonbruck/.espressif/python_env/idf5.4_py3.9_env/lib/python3.9/site-packages (from requests->idf-component-manager->-r /Users/nicolasvonbruck/esp/esp-idf-v5.4.2-tab5/tools/requirements/requirements.core.txt (line 16)) (3.4.7)
+Requirement already satisfied: idna<4,>=2.5 in /Users/nicolasvonbruck/.espressif/python_env/idf5.4_py3.9_env/lib/python3.9/site-packages (from requests->idf-component-manager->-r /Users/nicolasvonbruck/esp/esp-idf-v5.4.2-tab5/tools/requirements/requirements.core.txt (line 16)) (3.11)
+Requirement already satisfied: urllib3<3,>=1.21.1 in /Users/nicolasvonbruck/.espressif/python_env/idf5.4_py3.9_env/lib/python3.9/site-packages (from requests->idf-component-manager->-r /Users/nicolasvonbruck/esp/esp-idf-v5.4.2-tab5/tools/requirements/requirements.core.txt (line 16)) (1.26.20)
+Requirement already satisfied: certifi>=2017.4.17 in /Users/nicolasvonbruck/.espressif/python_env/idf5.4_py3.9_env/lib/python3.9/site-packages (from requests->idf-component-manager->-r /Users/nicolasvonbruck/esp/esp-idf-v5.4.2-tab5/tools/requirements/requirements.core.txt (line 16)) (2026.2.25)
+Using cached rich-15.0.0-py3-none-any.whl (310 kB)
+Installing collected packages: rich
+  Attempting uninstall: rich
+    Found existing installation: rich 14.3.3
+    Uninstalling rich-14.3.3:
+      Successfully uninstalled rich-14.3.3
+Successfully installed rich-15.0.0
+Upgrading pip...
+Upgrading setuptools...
+Installing Python packages
+ Constraint file: /Users/nicolasvonbruck/.espressif/espidf.constraints.v5.4.txt
+ Requirement files:
+  - /Users/nicolasvonbruck/esp/esp-idf-v5.4.2-tab5/tools/requirements/requirements.core.txt
+All done! You can now run:
+
+  . ./export.sh
+
+[2/3] Activating ESP-IDF 5.4.2...
+Checking "python3" ...
+Python 3.14.3
+"python3" has been detected
+
+ERROR: ESP-IDF Python virtual environment "/Users/nicolasvonbruck/.espressif/python_env/idf5.4_py3.14_env/bin/python" not found. Please run the install script to set it up before proceeding.
+[3/3] Building Official M5Tab5 Demo...
+/Users/nicolasvonbruck/Desktop/M5_3/silent_build.sh: line 26: idf.py: command not found
+/Users/nicolasvonbruck/Desktop/M5_3/silent_build.sh: line 27: idf.py: command not found
+[Final] Flashing Firmware...
+/Users/nicolasvonbruck/Desktop/M5_3/silent_build.sh: line 30: esptool.py: command not found
+DONE.
