@@ -151,6 +151,7 @@ static esp_err_t new_cam(int cam_fd, cam_t** ret_wc)
     struct v4l2_requestbuffers req;
     cam_t* wc;
 
+    printf("new_cam: getting format...\n");
     memset(&format, 0, sizeof(struct v4l2_format));
     format.type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
     if (ioctl(cam_fd, VIDIOC_G_FMT, &format) != 0) {
@@ -177,6 +178,7 @@ static esp_err_t new_cam(int cam_fd, cam_t** ret_wc)
         ret = ESP_FAIL;
         goto errout;
     }
+    printf("new_cam: reqbufs done. mmap loop...\n");
 
     for (int i = 0; i < ARRAY_SIZE(wc->buffer); i++) {
         struct v4l2_buffer buf;
@@ -203,14 +205,17 @@ static esp_err_t new_cam(int cam_fd, cam_t** ret_wc)
             ret = ESP_FAIL;
             goto errout;
         }
+        printf("new_cam: buffer %d queued\n", i);
     }
 
+    printf("new_cam: mmap done. starting stream...\n");
     if (ioctl(wc->fd, VIDIOC_STREAMON, &type)) {
         ESP_LOGE(TAG, "failed to start stream");
         ret = ESP_FAIL;
         goto errout;
     }
-
+    printf("new_cam: stream started!\n");
+ 
     *ret_wc = wc;
     return ESP_OK;
 
@@ -290,14 +295,17 @@ void app_camera_display(void* arg)
     ESP_ERROR_CHECK(ppa_register_client(&ppa_srm_config, &ppa_srm_handle));
 
     int task_control = 0;
+    static int log_div = 0;
     while (1) {
         memset(&buf, 0, sizeof(buf));
         buf.type   = V4L2_BUF_TYPE_VIDEO_CAPTURE;
         buf.memory = MEMORY_TYPE;
+        if (log_div == 0) printf("CAM_LOOP: DQBUF start...\n");
         if (ioctl(camera->fd, VIDIOC_DQBUF, &buf) != 0) {
             ESP_LOGE(TAG, "failed to receive video frame");
             break;
         }
+        if (log_div == 0) printf("CAM_LOOP: DQBUF done. PPA start...\n");
 
         ppa_srm_oper_config_t srm_config = {.in             = {.buffer         = camera->buffer[buf.index],
                                                                .pic_w          = 1280,
@@ -323,6 +331,7 @@ void app_camera_display(void* arg)
                                             .byte_swap      = false,
                                             .mode           = PPA_TRANS_MODE_BLOCKING};
         ppa_do_scale_rotate_mirror(ppa_srm_handle, &srm_config);
+        if (log_div == 0) printf("CAM_LOOP: PPA done. Vision start...\n");
 
         // auto detect_results = human_face_detector->run(dl_img); // format: hwc
 
@@ -346,18 +355,23 @@ void app_camera_display(void* arg)
                     uint16_t pixel = current_data[src_y * 1280 + src_x];
                     uint8_t gray = (uint8_t)((((pixel >> 11) & 0x1F) << 3) + (((pixel >> 5) & 0x3F) << 2) + ((pixel & 0x1F) << 3)) >> 2;
                     int diff = abs((int)gray - (int)last_frame_gray[y * VISION_W + x]);
-                    if (diff > 30) {
+                    if (diff > 20) {
                         sum_x += x; sum_y += y; count++;
                     }
                     last_frame_gray[y * VISION_W + x] = gray;
                 }
             }
+            if (log_div % 100 == 0) {
+                printf("VISION: Processing... pixels[0,0]=%04x, count=%ld\n", current_data[0], count);
+            }
+
             if (count > 50) {
                 float target_x = ((float)(sum_x / count) / VISION_W) * 2.0f - 1.0f;
                 float target_y = ((float)(sum_y / count) / VISION_H) * 2.0f - 1.0f;
                 vision_target_x = vision_target_x * 0.7f + target_x * 0.3f;
                 vision_target_y = vision_target_y * 0.7f + target_y * 0.3f;
                 vision_detected = true;
+                printf("VISION: Motion detected! count=%ld, target=%.2f,%.2f\n", count, vision_target_x, vision_target_y);
             }
         }
 
@@ -379,6 +393,7 @@ void app_camera_display(void* arg)
         }
 
         vTaskDelay(pdMS_TO_TICKS(10));
+        log_div++;
     }
 
     ESP_LOGI(TAG, "task exit");
