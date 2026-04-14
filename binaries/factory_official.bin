@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Error>
+  <Code>NoSuchKey</Code>
+  <Message>The specified key does not exist.</Message>
+  <RequestId>69DE51BF4803CC3737965889</RequestId>
+  <HostId>m5stack.oss-cn-shenzhen.aliyuncs.com</HostId>
+  <Key>resource/arduino/bin/M5Tab5/m5stack_tab5.bin</Key>
+  <EC>0026-00000001</EC>
+  <RecommendDoc>https://api.aliyun.com/troubleshoot?q=0026-00000001</RecommendDoc>
+</Error>
