@@ -29,20 +29,12 @@
 #include "driver/ppa.h"
 #include "imlib.h"
 #include "freertos/queue.h"
+#include "motion_detector.h"
 
 #define CAMERA_WIDTH  1280
 #define CAMERA_HEIGHT 720
 
 static lv_obj_t* camera_canvas;
- 
-// Vision Targets (-1.0 to 1.0)
-float vision_target_x = 0;
-float vision_target_y = 0;
-bool vision_detected = false;
-static uint8_t* last_frame_gray = NULL;
-#define VISION_W 160
-#define VISION_H 90
-// extern uint8_t* frame_buf;
 static QueueHandle_t queue_camera_ctrl = NULL;
 // 定义任务控制标志
 #define TASK_CONTROL_PAUSE  0
@@ -294,89 +286,132 @@ void app_camera_display(void* arg)
     };
     ESP_ERROR_CHECK(ppa_register_client(&ppa_srm_config, &ppa_srm_handle));
 
+    motion_detector::init();
+
+    // Display the camera preview at this fraction of the capture rate. Motion
+    // detection runs every frame; PPA + lv_canvas_set_buffer only every Nth.
+    // Each display update costs ~190 ms (PPA ~68 ms + LVGL canvas swap
+    // ~123 ms for a 1280x720 RGB565 surface) so doing it every frame caps
+    // the camera at ~4 fps. With N=10 motion runs at ~22 fps and the preview
+    // updates at ~2 fps — the right trade-off when motion latency matters
+    // more than preview smoothness.
+    constexpr int kDisplayUpdateEveryN = 10;
+    uint32_t display_div = 0;
+
     int task_control = 0;
-    static int log_div = 0;
+    uint32_t fps_frame_count    = 0;
+    uint32_t display_frame_count = 0;
+    int64_t  fps_last_print     = esp_timer_get_time();
+
+    // Per-stage profiling accumulators (microseconds, summed over 1s window).
+    int64_t prof_dqbuf_us  = 0;
+    int64_t prof_motion_us = 0;
+    int64_t prof_ppa_us    = 0;
+    int64_t prof_disp_us   = 0;
+    int64_t prof_qbuf_us   = 0;
+    int64_t prof_yield_us  = 0;
+
     while (1) {
+        int64_t t0 = esp_timer_get_time();
+
         memset(&buf, 0, sizeof(buf));
         buf.type   = V4L2_BUF_TYPE_VIDEO_CAPTURE;
         buf.memory = MEMORY_TYPE;
-        if (log_div == 0) printf("CAM_LOOP: DQBUF start...\n");
         if (ioctl(camera->fd, VIDIOC_DQBUF, &buf) != 0) {
             ESP_LOGE(TAG, "failed to receive video frame");
             break;
         }
-        if (log_div == 0) printf("CAM_LOOP: DQBUF done. PPA start...\n");
+        int64_t t1 = esp_timer_get_time();
 
-        ppa_srm_oper_config_t srm_config = {.in             = {.buffer         = camera->buffer[buf.index],
-                                                               .pic_w          = 1280,
-                                                               .pic_h          = 720,
-                                                               .block_w        = 1280,
-                                                               .block_h        = 720,
-                                                               .block_offset_x = 0,
-                                                               .block_offset_y = 0,
-                                                               .srm_cm         = PPA_SRM_COLOR_MODE_RGB565},
-                                            .out            = {.buffer         = img_show_data,
-                                                               .buffer_size    = img_show_size,
-                                                               .pic_w          = 1280,
-                                                               .pic_h          = 720,
-                                                               .block_offset_x = 0,
-                                                               .block_offset_y = 0,
-                                                               .srm_cm         = PPA_SRM_COLOR_MODE_RGB565},
-                                            .rotation_angle = PPA_SRM_ROTATION_ANGLE_0,
-                                            .scale_x        = 1,
-                                            .scale_y        = 1,
-                                            .mirror_x       = true,
-                                            .mirror_y       = false,
-                                            .rgb_swap       = false,
-                                            .byte_swap      = false,
-                                            .mode           = PPA_TRANS_MODE_BLOCKING};
-        ppa_do_scale_rotate_mirror(ppa_srm_handle, &srm_config);
-        if (log_div == 0) printf("CAM_LOOP: PPA done. Vision start...\n");
+        // Motion detection runs every frame on the raw camera buffer (no PPA).
+        // The raw buffer is NOT mirrored, so flip_x=true keeps the target_x
+        // sign consistent with the displayed (mirrored) preview.
+        motion_detector::process_frame(
+            reinterpret_cast<const uint16_t*>(camera->buffer[buf.index]),
+            CAMERA_WIDTH,
+            /*flip_x=*/true);
+        int64_t t2 = esp_timer_get_time();
 
-        // auto detect_results = human_face_detector->run(dl_img); // format: hwc
+        // Display preview update: scale/rotate/mirror via PPA, then publish
+        // to the LVGL canvas. Skipped on most frames.
+        int64_t ppa_dt  = 0;
+        int64_t disp_dt = 0;
+        bool did_display = false;
+        if ((display_div++ % kDisplayUpdateEveryN) == 0) {
+            int64_t tp0 = esp_timer_get_time();
+            ppa_srm_oper_config_t srm_config = {.in             = {.buffer         = camera->buffer[buf.index],
+                                                                   .pic_w          = 1280,
+                                                                   .pic_h          = 720,
+                                                                   .block_w        = 1280,
+                                                                   .block_h        = 720,
+                                                                   .block_offset_x = 0,
+                                                                   .block_offset_y = 0,
+                                                                   .srm_cm         = PPA_SRM_COLOR_MODE_RGB565},
+                                                .out            = {.buffer         = img_show_data,
+                                                                   .buffer_size    = img_show_size,
+                                                                   .pic_w          = 1280,
+                                                                   .pic_h          = 720,
+                                                                   .block_offset_x = 0,
+                                                                   .block_offset_y = 0,
+                                                                   .srm_cm         = PPA_SRM_COLOR_MODE_RGB565},
+                                                .rotation_angle = PPA_SRM_ROTATION_ANGLE_0,
+                                                .scale_x        = 1,
+                                                .scale_y        = 1,
+                                                .mirror_x       = true,
+                                                .mirror_y       = false,
+                                                .rgb_swap       = false,
+                                                .byte_swap      = false,
+                                                .mode           = PPA_TRANS_MODE_BLOCKING};
+            ppa_do_scale_rotate_mirror(ppa_srm_handle, &srm_config);
+            int64_t tp1 = esp_timer_get_time();
 
-        bsp_display_lock(0);
-        lv_canvas_set_buffer(camera_canvas, img_show->data, CAMERA_WIDTH, CAMERA_HEIGHT, LV_COLOR_FORMAT_RGB565);
-        bsp_display_unlock();
+            bsp_display_lock(0);
+            lv_canvas_set_buffer(camera_canvas, img_show->data, CAMERA_WIDTH, CAMERA_HEIGHT, LV_COLOR_FORMAT_RGB565);
+            bsp_display_unlock();
+            int64_t tp2 = esp_timer_get_time();
 
-        // Real Vision Logic: Motion Detection
-        if (last_frame_gray == NULL) {
-            last_frame_gray = (uint8_t*)heap_caps_malloc(VISION_W * VISION_H, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
-            if (last_frame_gray) memset(last_frame_gray, 0, VISION_W * VISION_H);
+            ppa_dt  = tp1 - tp0;
+            disp_dt = tp2 - tp1;
+            did_display = true;
         }
-
-        if (last_frame_gray) {
-            long sum_x = 0, sum_y = 0, count = 0;
-            uint16_t* current_data = (uint16_t*)img_show->data;
-            for (int y = 0; y < VISION_H; y++) {
-                for (int x = 0; x < VISION_W; x++) {
-                    int src_x = x * 8;
-                    int src_y = y * 8;
-                    uint16_t pixel = current_data[src_y * 1280 + src_x];
-                    uint8_t gray = (uint8_t)((((pixel >> 11) & 0x1F) << 3) + (((pixel >> 5) & 0x3F) << 2) + ((pixel & 0x1F) << 3)) >> 2;
-                    int diff = abs((int)gray - (int)last_frame_gray[y * VISION_W + x]);
-                    if (diff > 20) {
-                        sum_x += x; sum_y += y; count++;
-                    }
-                    last_frame_gray[y * VISION_W + x] = gray;
-                }
-            }
-            if (log_div % 100 == 0) {
-                printf("VISION: Processing... pixels[0,0]=%04x, count=%ld\n", current_data[0], count);
-            }
-
-            if (count > 50) {
-                float target_x = ((float)(sum_x / count) / VISION_W) * 2.0f - 1.0f;
-                float target_y = ((float)(sum_y / count) / VISION_H) * 2.0f - 1.0f;
-                vision_target_x = vision_target_x * 0.7f + target_x * 0.3f;
-                vision_target_y = vision_target_y * 0.7f + target_y * 0.3f;
-                vision_detected = true;
-                printf("VISION: Motion detected! count=%ld, target=%.2f,%.2f\n", count, vision_target_x, vision_target_y);
-            }
-        }
+        int64_t t3 = esp_timer_get_time();
 
         if (ioctl(camera->fd, VIDIOC_QBUF, &buf) != 0) {
             ESP_LOGE(TAG, "failed to free video frame");
+        }
+        int64_t t4 = esp_timer_get_time();
+
+        prof_dqbuf_us  += (t1 - t0);
+        prof_motion_us += (t2 - t1);
+        prof_ppa_us    += ppa_dt;
+        prof_disp_us   += disp_dt;
+        prof_qbuf_us   += (t4 - t3);
+        if (did_display) ++display_frame_count;
+
+        // 1 Hz FPS + per-stage profiling summary.
+        ++fps_frame_count;
+        int64_t now_us = esp_timer_get_time();
+        if (now_us - fps_last_print >= 1000000) {
+            uint32_t n  = fps_frame_count ? fps_frame_count : 1;
+            uint32_t dn = display_frame_count ? display_frame_count : 1;
+            printf("CAM: %lu fps (disp %lu fps)  motion=%s target=(%+.2f, %+.2f) | "
+                   "avg us: dqbuf=%lld motion=%lld ppa(disp)=%lld lvgl(disp)=%lld qbuf=%lld yield=%lld\n",
+                   static_cast<unsigned long>(fps_frame_count),
+                   static_cast<unsigned long>(display_frame_count),
+                   motion_detector::is_detected() ? "yes" : " no",
+                   motion_detector::target_x(),
+                   motion_detector::target_y(),
+                   (long long)(prof_dqbuf_us / n),
+                   (long long)(prof_motion_us / n),
+                   (long long)(prof_ppa_us / dn),
+                   (long long)(prof_disp_us / dn),
+                   (long long)(prof_qbuf_us / n),
+                   (long long)(prof_yield_us / n));
+            fps_frame_count = 0;
+            display_frame_count = 0;
+            fps_last_print  = now_us;
+            prof_dqbuf_us = prof_motion_us = prof_ppa_us = 0;
+            prof_disp_us  = prof_qbuf_us  = prof_yield_us = 0;
         }
 
         if (xQueueReceive(queue_camera_ctrl, &task_control, 0) == pdPASS) {
@@ -392,8 +427,14 @@ void app_camera_display(void* arg)
             }
         }
 
-        vTaskDelay(pdMS_TO_TICKS(10));
-        log_div++;
+        // Yield once per frame so lower-priority tasks (LVGL, idle, watchdog
+        // feed) get serviced. DQBUF already blocks until the next frame is
+        // ready — no need for a longer artificial delay. taskYIELD() returns
+        // immediately if no other task is ready, unlike vTaskDelay(1) which
+        // sleeps a full tick (10 ms at 100 Hz, 1 ms at 1000 Hz).
+        int64_t ty0 = esp_timer_get_time();
+        taskYIELD();
+        prof_yield_us += (esp_timer_get_time() - ty0);
     }
 
     ESP_LOGI(TAG, "task exit");
