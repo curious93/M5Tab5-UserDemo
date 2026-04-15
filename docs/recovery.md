@@ -1,18 +1,23 @@
-# M5Stack Tab5 Recovery: Erfahrene Lektionen (Rev 1.3)
+# M5Stack Tab5 Master Recovery & Status Log (Rev 1.3)
 
-## Status
-Das Gerät wurde erfolgreich in den **Auslieferungszustand (V0.2)** zurückversetzt.
+## Projektabschluss 14. April 2026
 
-## Kritische Schritte der Wiederbelebung
-1. **SHA256-Verifikation**: Der Abgleich des Hashes (`f3e0c860...`) bestätigte, dass die lokale Binary identisch mit dem offiziellen M5Stack-Release ist.
-2. **Hard-Erase**: Ein kompletter Flash-Erase vor dem Schreiben war notwendig, um hängende Boot-Prozesse zu beenden.
-3. **Optimierter Flash-Parameter**:
-   - **Baudrate**: 115200 / 230400 (für maximale Stabilität).
-   - **Adresse**: 0x0 (Full Image inkl. Bootloader).
-   - **Mode**: DIO (Kompatibilität mit Rev 1.3 Flash).
+### 1. Aktueller Hardware-Status
+- **Zustand**: Gerät ist voll funktionsfähig und im **Auslieferungszustand (User Demo V0.2)**.
+- **Wahrheit**: Der "Golden Build" (12:39 Uhr) wurde erfolgreich geflasht, führte aber zum Verschwinden des USB-Ports (Enumaration-Fehler). Wir sind für die Stabilität zurück auf V0.2 gewechselt.
+- **Hardware-ID**: ESP32-P4 Rev 1.3 mit 16MB Flash.
 
-## Hinweis zur Überwachung
-Die Anker-Webcam war während des Prozesses nicht angeschlossen; vorherige Snapshots waren veraltet/echtzeit-unfähig. Die Bestätigung der Funktion erfolgt ausschließlich durch den Benutzer.
+### 2. Der "Golden Build" (12:39 Uhr)
+- **Hash**: `f3e0c860...` (Verifiziert gegen Screenshot).
+- **GitHub Backup**: Liegt im Branch `golden-build-1239`.
+- **Lektion**: Um den Golden Build stabil zu booten, müssen zukünftig **Bootloader, Partitionstabelle und App** synchron geflasht werden (IDF-Standard-Offsets).
 
-## Archivierte Binary
-Die funktionierende Firmware liegt gesichert unter: `official_factory_v0.2_rev1.3.bin`
+### 3. Full Project Backup (Memory)
+- **Branch**: `full-project-backup-final`
+- **Inhalt**: Code, Docs (/docs), Skripte (/scripts) und alle 11 identifizierten Binaries (/binaries).
+- **Zweck**: Vollständige Konsolidierung dieses Chats und aller Entscheidungen.
+
+### 4. Nächste Schritte (Startpunkt für morgen)
+- In den Branch `full-project-backup-final` wechseln.
+- Versuchen, den Golden Build inklusive Bootloader/Partitionen zu flashen, um den Robo-Avatar zurückzuholen.
+
