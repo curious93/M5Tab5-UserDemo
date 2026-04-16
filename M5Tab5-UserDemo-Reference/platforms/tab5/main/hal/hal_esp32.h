@@ -56,6 +56,10 @@ public:
     void startCameraCapture(lv_obj_t* imgCanvas) override;
     void stopCameraCapture() override;
     bool isCameraCapturing() override;
+    // Returns a pointer to the latest PPA-mirrored RGB565 frame (1280×720),
+    // or nullptr if no new frame has arrived since the last call.
+    // Call only from the LVGL task (e.g. inside an lv_timer callback).
+    uint8_t* consumeReadyFrame();
 
     void setSpeakerVolume(uint8_t volume) override;
     uint8_t getSpeakerVolume() override;

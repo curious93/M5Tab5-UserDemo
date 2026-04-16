@@ -2,6 +2,25 @@
  * SPDX-FileCopyrightText: 2025 M5Stack Technology CO LTD
  *
  * SPDX-License-Identifier: MIT
+ *
+ * Camera capture task for the Tab5 (ESP32-P4).
+ *
+ * Architecture (v4 — fluid display):
+ *   Camera Task (Core 1)
+ *     DQBUF → motion_detect → PPA mirror_x → publish to ping-pong buffer → QBUF
+ *     ZERO LVGL API calls — no lock contention with LVGL task.
+ *
+ *   LVGL Task (Core 0) — via lv_timer registered in app_main
+ *     Calls consumeReadyFrame() → draws bbox pixels → lv_canvas_set_buffer()
+ *     Runs inside LVGL task → owns the lock intrinsically → zero wait time.
+ *
+ * Ping-pong buffer:
+ *   g_ppa_buf[0/1]  — two 1280×720 RGB565 PSRAM buffers
+ *   g_ready_idx     — atomic: -1 = none ready, 0/1 = index of latest frame
+ *   g_write_idx     — which buffer the camera task writes (never shared)
+ *
+ *   After PPA: atomic exchange publishes new frame; unconsumed frames are
+ *   recycled as the next write target so memory is never wasted.
  */
 #include "hal/hal_esp32.h"
 #include "../utils/task_controller/task_controller.h"
@@ -17,6 +36,7 @@
 #include "esp_log.h"
 #include "esp_timer.h"
 #include <string.h>
+#include <atomic>
 #include <fcntl.h>
 #include <sys/ioctl.h>
 #include <sys/mman.h>
@@ -36,7 +56,7 @@
 
 static lv_obj_t* camera_canvas;
 static QueueHandle_t queue_camera_ctrl = NULL;
-// 定义任务控制标志
+
 #define TASK_CONTROL_PAUSE  0
 #define TASK_CONTROL_RESUME 1
 #define TASK_CONTROL_EXIT   2
@@ -61,9 +81,6 @@ typedef struct cam {
     uint8_t* buffer[EXAMPLE_VIDEO_BUFFER_COUNT];
 } cam_t;
 
-/*
- * The image format type definition used in the example.
- */
 typedef enum {
     EXAMPLE_VIDEO_FMT_RAW8   = V4L2_PIX_FMT_SBGGR8,
     EXAMPLE_VIDEO_FMT_RAW10  = V4L2_PIX_FMT_SBGGR10,
@@ -74,17 +91,6 @@ typedef enum {
     EXAMPLE_VIDEO_FMT_YUV420 = V4L2_PIX_FMT_YUV420,
 } example_fmt_t;
 
-/**
- * @brief   Open the video device and initialize the video device to use `init_fmt` as the output format.
- * @note    When the sensor outputs data in RAW format, the ISP module can interpolate its data into RGB or YUV format.
- *          However, when the sensor works in RGB or YUV format, the output data can only be in RGB or YUV format.
- * @param dev device name(eg, "/dev/video0")
- * @param init_fmt output format.
- *
- * @return
- *     - Device descriptor   Success
- *     - -1 error
- */
 int app_video_open(char* dev, example_fmt_t init_fmt)
 {
     struct v4l2_format default_format;
@@ -207,7 +213,7 @@ static esp_err_t new_cam(int cam_fd, cam_t** ret_wc)
         goto errout;
     }
     printf("new_cam: stream started!\n");
- 
+
     *ret_wc = wc;
     return ESP_OK;
 
@@ -216,9 +222,15 @@ errout:
     return ret;
 }
 
-// static HumanFaceDetect* human_face_detector;
 static bool cam_is_initial = false;
 static cam_t* camera       = NULL;
+
+// Ping-pong display buffers — camera task writes, LVGL lv_timer reads.
+// g_ready_idx: -1 = no frame ready, 0/1 = index of latest PPA-processed frame.
+// g_write_idx: buffer the camera task is currently writing (never shared).
+static uint8_t* g_ppa_buf[2]         = {nullptr, nullptr};
+static std::atomic<int> g_ready_idx  {-1};
+static int              g_write_idx  = 0;
 
 void app_camera_display(void* arg)
 {
@@ -228,17 +240,17 @@ void app_camera_display(void* arg)
             {
                 .init_sccb  = false,
                 .i2c_handle = NULL,
-                .freq       = 400000,  // TAB5_MIPI_CSI_SCCB_I2C_FREQ,
+                .freq       = 400000,
             },
-        .reset_pin = -1,  // TAB5_MIPI_CSI_CAM_SENSOR_RESET_PIN,
-        .pwdn_pin  = -1,  // TAB5_MIPI_CSI_CAM_SENSOR_PWDN_PIN,
+        .reset_pin = -1,
+        .pwdn_pin  = -1,
     };
     csi_config.sccb_config.i2c_handle = bsp_i2c_get_handle();
 
     esp_video_init_config_t cam_config = {
-        .csi  = &csi_config,  // Point to CSI config
-        .dvp  = NULL,         // No DVP configuration
-        .jpeg = NULL,         // No JPEG configuration
+        .csi  = &csi_config,
+        .dvp  = NULL,
+        .jpeg = NULL,
     };
 
     if (!cam_is_initial) {
@@ -250,211 +262,176 @@ void app_camera_display(void* arg)
         int video_cam_fd = app_video_open(CAM_DEV_PATH, EXAMPLE_VIDEO_FMT_RGB565);
         if (video_cam_fd < 0) {
             ESP_LOGE(TAG, "video cam open failed");
-            return;
+            goto done;
         }
         ESP_ERROR_CHECK(new_cam(video_cam_fd, &camera));
     }
 
-    struct v4l2_buffer buf;
+    {
+        struct v4l2_buffer buf;
+        const uint32_t img_show_size = CAMERA_WIDTH * CAMERA_HEIGHT * 2;
 
-    /* */
-    uint16_t screen_width  = 1280;  // 640;//lcd_height();
-    uint16_t screen_height = 720;   // 480;//lcd_width();
-    uint8_t* img_show_data = NULL;
-    uint32_t img_show_size = screen_width * screen_height * 2;
-    // uint32_t img_offset = 280 * 720 * 2;
-    uint32_t img_offset = 0;
-    static image_t* img_show;  // 初始化静态变量时不能使用非常量表达式
-    if (img_show == NULL) {
-        img_show    = (image_t*)malloc(sizeof(image_t));
-        img_show->w = 720,            // screen_width;
-                                      // img_show->h = 720, // screen_height;
-            img_show->h      = 1280,  // screen_height;
-            img_show->pixfmt = PIXFORMAT_RGB565;
-        img_show->size       = img_show->w * img_show->h * img_show->bpp;
-        img_show_data        = (uint8_t*)heap_caps_calloc(img_show_size, 1, MALLOC_CAP_DMA | MALLOC_CAP_SPIRAM);
-        img_show->data       = img_show_data + img_offset;
-        if (img_show->data == NULL) {
-            ESP_LOGE(TAG, "malloc for img_show->data failed");
+        // Allocate two ping-pong PPA output buffers (each 1280×720×2 = 1.84 MB).
+        g_ppa_buf[0] = (uint8_t*)heap_caps_calloc(img_show_size, 1, MALLOC_CAP_DMA | MALLOC_CAP_SPIRAM);
+        g_ppa_buf[1] = (uint8_t*)heap_caps_calloc(img_show_size, 1, MALLOC_CAP_DMA | MALLOC_CAP_SPIRAM);
+        if (!g_ppa_buf[0] || !g_ppa_buf[1]) {
+            ESP_LOGE(TAG, "PPA buffer alloc failed");
+            goto done;
         }
-    }
+        g_write_idx = 0;
+        g_ready_idx.store(-1, std::memory_order_relaxed);
 
-    ppa_client_handle_t ppa_srm_handle = NULL;
-    ppa_client_config_t ppa_srm_config = {
-        .oper_type             = PPA_OPERATION_SRM,
-        .max_pending_trans_num = 1,
-    };
-    ESP_ERROR_CHECK(ppa_register_client(&ppa_srm_config, &ppa_srm_handle));
+        ppa_client_handle_t ppa_srm_handle = NULL;
+        ppa_client_config_t ppa_srm_config = {
+            .oper_type             = PPA_OPERATION_SRM,
+            .max_pending_trans_num = 1,
+        };
+        ESP_ERROR_CHECK(ppa_register_client(&ppa_srm_config, &ppa_srm_handle));
 
-    motion_detector::init();
+        motion_detector::init();
 
-    // Display the camera preview at this fraction of the capture rate. Motion
-    // detection runs every frame; PPA + lv_canvas_set_buffer only every Nth.
-    // Each display update costs ~190 ms (PPA ~68 ms + LVGL canvas swap
-    // ~123 ms for a 1280x720 RGB565 surface) so doing it every frame caps
-    // the camera at ~4 fps. With N=10 motion runs at ~22 fps and the preview
-    // updates at ~2 fps — the right trade-off when motion latency matters
-    // more than preview smoothness.
-    constexpr int kDisplayUpdateEveryN = 10;
-    uint32_t display_div = 0;
+        int task_control       = 0;
+        uint32_t fps_frame_count = 0;
+        int64_t  fps_last_print  = esp_timer_get_time();
 
-    int task_control = 0;
-    uint32_t fps_frame_count    = 0;
-    uint32_t display_frame_count = 0;
-    int64_t  fps_last_print     = esp_timer_get_time();
+        // Per-stage profiling accumulators (µs, summed over 1-second window).
+        int64_t prof_dqbuf_us  = 0;
+        int64_t prof_motion_us = 0;
+        int64_t prof_ppa_us    = 0;
+        int64_t prof_qbuf_us   = 0;
 
-    // Per-stage profiling accumulators (microseconds, summed over 1s window).
-    int64_t prof_dqbuf_us  = 0;
-    int64_t prof_motion_us = 0;
-    int64_t prof_ppa_us    = 0;
-    int64_t prof_disp_us   = 0;
-    int64_t prof_qbuf_us   = 0;
-    int64_t prof_yield_us  = 0;
+        while (1) {
+            int64_t t0 = esp_timer_get_time();
 
-    while (1) {
-        int64_t t0 = esp_timer_get_time();
+            memset(&buf, 0, sizeof(buf));
+            buf.type   = V4L2_BUF_TYPE_VIDEO_CAPTURE;
+            buf.memory = MEMORY_TYPE;
+            if (ioctl(camera->fd, VIDIOC_DQBUF, &buf) != 0) {
+                ESP_LOGE(TAG, "failed to receive video frame");
+                break;
+            }
+            int64_t t1 = esp_timer_get_time();
 
-        memset(&buf, 0, sizeof(buf));
-        buf.type   = V4L2_BUF_TYPE_VIDEO_CAPTURE;
-        buf.memory = MEMORY_TYPE;
-        if (ioctl(camera->fd, VIDIOC_DQBUF, &buf) != 0) {
-            ESP_LOGE(TAG, "failed to receive video frame");
-            break;
-        }
-        int64_t t1 = esp_timer_get_time();
+            // Motion detection: runs on every frame from the raw (unmirrored)
+            // camera buffer. flip_x=true corrects coordinates to match the
+            // mirrored display output produced by PPA below.
+            motion_detector::process_frame(
+                reinterpret_cast<const uint16_t*>(camera->buffer[buf.index]),
+                CAMERA_WIDTH,
+                /*flip_x=*/true);
+            int64_t t2 = esp_timer_get_time();
 
-        // Motion detection runs every frame on the raw camera buffer (no PPA).
-        // The raw buffer is NOT mirrored, so flip_x=true keeps the target_x
-        // sign consistent with the displayed (mirrored) preview.
-        motion_detector::process_frame(
-            reinterpret_cast<const uint16_t*>(camera->buffer[buf.index]),
-            CAMERA_WIDTH,
-            /*flip_x=*/true);
-        int64_t t2 = esp_timer_get_time();
-
-        // Display preview update: scale/rotate/mirror via PPA, then publish
-        // to the LVGL canvas. Skipped on most frames.
-        int64_t ppa_dt  = 0;
-        int64_t disp_dt = 0;
-        bool did_display = false;
-        if ((display_div++ % kDisplayUpdateEveryN) == 0) {
-            int64_t tp0 = esp_timer_get_time();
-            ppa_srm_oper_config_t srm_config = {.in             = {.buffer         = camera->buffer[buf.index],
-                                                                   .pic_w          = 1280,
-                                                                   .pic_h          = 720,
-                                                                   .block_w        = 1280,
-                                                                   .block_h        = 720,
-                                                                   .block_offset_x = 0,
-                                                                   .block_offset_y = 0,
-                                                                   .srm_cm         = PPA_SRM_COLOR_MODE_RGB565},
-                                                .out            = {.buffer         = img_show_data,
-                                                                   .buffer_size    = img_show_size,
-                                                                   .pic_w          = 1280,
-                                                                   .pic_h          = 720,
-                                                                   .block_offset_x = 0,
-                                                                   .block_offset_y = 0,
-                                                                   .srm_cm         = PPA_SRM_COLOR_MODE_RGB565},
-                                                .rotation_angle = PPA_SRM_ROTATION_ANGLE_0,
-                                                .scale_x        = 1,
-                                                .scale_y        = 1,
-                                                .mirror_x       = true,
-                                                .mirror_y       = false,
-                                                .rgb_swap       = false,
-                                                .byte_swap      = false,
-                                                .mode           = PPA_TRANS_MODE_BLOCKING};
+            // PPA: horizontal mirror into the current write buffer.
+            // Runs on every frame — no N-skipping needed now that the camera
+            // task never touches LVGL (zero lock-contention).
+            ppa_srm_oper_config_t srm_config = {
+                .in  = {.buffer         = camera->buffer[buf.index],
+                        .pic_w          = 1280,
+                        .pic_h          = 720,
+                        .block_w        = 1280,
+                        .block_h        = 720,
+                        .block_offset_x = 0,
+                        .block_offset_y = 0,
+                        .srm_cm         = PPA_SRM_COLOR_MODE_RGB565},
+                .out = {.buffer         = g_ppa_buf[g_write_idx],
+                        .buffer_size    = img_show_size,
+                        .pic_w          = 1280,
+                        .pic_h          = 720,
+                        .block_offset_x = 0,
+                        .block_offset_y = 0,
+                        .srm_cm         = PPA_SRM_COLOR_MODE_RGB565},
+                .rotation_angle = PPA_SRM_ROTATION_ANGLE_0,
+                .scale_x        = 1,
+                .scale_y        = 1,
+                .mirror_x       = true,
+                .mirror_y       = false,
+                .rgb_swap       = false,
+                .byte_swap      = false,
+                .mode           = PPA_TRANS_MODE_BLOCKING,
+            };
             ppa_do_scale_rotate_mirror(ppa_srm_handle, &srm_config);
-            int64_t tp1 = esp_timer_get_time();
+            int64_t t3 = esp_timer_get_time();
 
-            bsp_display_lock(0);
-            lv_canvas_set_buffer(camera_canvas, img_show->data, CAMERA_WIDTH, CAMERA_HEIGHT, LV_COLOR_FORMAT_RGB565);
-            bsp_display_unlock();
-            int64_t tp2 = esp_timer_get_time();
+            // Atomically publish the new frame. If the LVGL timer hasn't
+            // consumed the previous frame yet, recycle that buffer as the
+            // next write target (avoids ever re-using the buffer LVGL is
+            // currently reading from).
+            {
+                int old_ready = g_ready_idx.exchange(g_write_idx, std::memory_order_release);
+                g_write_idx   = (old_ready >= 0) ? old_ready : (g_write_idx ^ 1);
+            }
 
-            ppa_dt  = tp1 - tp0;
-            disp_dt = tp2 - tp1;
-            did_display = true;
-        }
-        int64_t t3 = esp_timer_get_time();
+            if (ioctl(camera->fd, VIDIOC_QBUF, &buf) != 0) {
+                ESP_LOGE(TAG, "failed to free video frame");
+            }
+            int64_t t4 = esp_timer_get_time();
 
-        if (ioctl(camera->fd, VIDIOC_QBUF, &buf) != 0) {
-            ESP_LOGE(TAG, "failed to free video frame");
-        }
-        int64_t t4 = esp_timer_get_time();
+            prof_dqbuf_us  += (t1 - t0);
+            prof_motion_us += (t2 - t1);
+            prof_ppa_us    += (t3 - t2);
+            prof_qbuf_us   += (t4 - t3);
 
-        prof_dqbuf_us  += (t1 - t0);
-        prof_motion_us += (t2 - t1);
-        prof_ppa_us    += ppa_dt;
-        prof_disp_us   += disp_dt;
-        prof_qbuf_us   += (t4 - t3);
-        if (did_display) ++display_frame_count;
+            ++fps_frame_count;
+            int64_t now_us = esp_timer_get_time();
+            if (now_us - fps_last_print >= 1000000) {
+                uint32_t n = fps_frame_count ? fps_frame_count : 1;
+                printf("CAM: %lu fps | motion=%s target=(%+.2f, %+.2f) | "
+                       "avg us: dqbuf=%lld motion=%lld ppa=%lld qbuf=%lld\n",
+                       static_cast<unsigned long>(fps_frame_count),
+                       motion_detector::is_detected() ? "yes" : " no",
+                       motion_detector::target_x(),
+                       motion_detector::target_y(),
+                       (long long)(prof_dqbuf_us  / n),
+                       (long long)(prof_motion_us / n),
+                       (long long)(prof_ppa_us    / n),
+                       (long long)(prof_qbuf_us   / n));
+                fps_frame_count = 0;
+                fps_last_print  = now_us;
+                prof_dqbuf_us = prof_motion_us = prof_ppa_us = prof_qbuf_us = 0;
+            }
 
-        // 1 Hz FPS + per-stage profiling summary.
-        ++fps_frame_count;
-        int64_t now_us = esp_timer_get_time();
-        if (now_us - fps_last_print >= 1000000) {
-            uint32_t n  = fps_frame_count ? fps_frame_count : 1;
-            uint32_t dn = display_frame_count ? display_frame_count : 1;
-            printf("CAM: %lu fps (disp %lu fps)  motion=%s target=(%+.2f, %+.2f) | "
-                   "avg us: dqbuf=%lld motion=%lld ppa(disp)=%lld lvgl(disp)=%lld qbuf=%lld yield=%lld\n",
-                   static_cast<unsigned long>(fps_frame_count),
-                   static_cast<unsigned long>(display_frame_count),
-                   motion_detector::is_detected() ? "yes" : " no",
-                   motion_detector::target_x(),
-                   motion_detector::target_y(),
-                   (long long)(prof_dqbuf_us / n),
-                   (long long)(prof_motion_us / n),
-                   (long long)(prof_ppa_us / dn),
-                   (long long)(prof_disp_us / dn),
-                   (long long)(prof_qbuf_us / n),
-                   (long long)(prof_yield_us / n));
-            fps_frame_count = 0;
-            display_frame_count = 0;
-            fps_last_print  = now_us;
-            prof_dqbuf_us = prof_motion_us = prof_ppa_us = 0;
-            prof_disp_us  = prof_qbuf_us  = prof_yield_us = 0;
-        }
-
-        if (xQueueReceive(queue_camera_ctrl, &task_control, 0) == pdPASS) {
-            if (task_control == TASK_CONTROL_PAUSE) {
-                ESP_LOGI(TAG, "task pause");
-                if (xQueueReceive(queue_camera_ctrl, &task_control, portMAX_DELAY) == pdPASS) {
-                    if (task_control == TASK_CONTROL_EXIT) {
-                        break;
-                    } else {
-                        ESP_LOGI(TAG, "task resume");
+            if (xQueueReceive(queue_camera_ctrl, &task_control, 0) == pdPASS) {
+                if (task_control == TASK_CONTROL_PAUSE) {
+                    ESP_LOGI(TAG, "task pause");
+                    if (xQueueReceive(queue_camera_ctrl, &task_control, portMAX_DELAY) == pdPASS) {
+                        if (task_control == TASK_CONTROL_EXIT) {
+                            break;
+                        } else {
+                            ESP_LOGI(TAG, "task resume");
+                        }
                     }
                 }
             }
+
+            // Yield once per frame so LVGL task, idle task, and watchdog get
+            // serviced. DQBUF already blocks ~28 ms waiting for the sensor —
+            // no artificial delay needed.
+            taskYIELD();
         }
 
-        // Yield once per frame so lower-priority tasks (LVGL, idle, watchdog
-        // feed) get serviced. DQBUF already blocks until the next frame is
-        // ready — no need for a longer artificial delay. taskYIELD() returns
-        // immediately if no other task is ready, unlike vTaskDelay(1) which
-        // sleeps a full tick (10 ms at 100 Hz, 1 ms at 1000 Hz).
-        int64_t ty0 = esp_timer_get_time();
-        taskYIELD();
-        prof_yield_us += (esp_timer_get_time() - ty0);
+        ppa_unregister_client(ppa_srm_handle);
     }
 
-    ESP_LOGI(TAG, "task exit");
-    ppa_unregister_client(ppa_srm_handle);
-    // delete human_face_detector;
-    if (img_show_data) {
-        heap_caps_free(img_show_data);
-        img_show_data = NULL;
-    }
-    if (img_show) {
-        heap_caps_free(img_show);
-        img_show = NULL;
-    }
-    // close(camera->fd);
+done:
+    if (g_ppa_buf[0]) { heap_caps_free(g_ppa_buf[0]); g_ppa_buf[0] = nullptr; }
+    if (g_ppa_buf[1]) { heap_caps_free(g_ppa_buf[1]); g_ppa_buf[1] = nullptr; }
+    g_ready_idx.store(-1, std::memory_order_relaxed);
 
     camera_mutex.lock();
     is_camera_capturing = false;
     camera_mutex.unlock();
 
     vTaskDelete(NULL);
+}
+
+// Called from the LVGL lv_timer callback (app_main.cpp) to retrieve the
+// latest PPA-processed frame. Returns a pointer to the RGB565 buffer
+// (1280×720) or nullptr if no new frame has arrived since the last call.
+// Atomically marks the frame as consumed so the camera task can recycle it.
+uint8_t* HalEsp32::consumeReadyFrame()
+{
+    int idx = g_ready_idx.exchange(-1, std::memory_order_acquire);
+    return (idx >= 0) ? g_ppa_buf[idx] : nullptr;
 }
 
 void HalEsp32::startCameraCapture(lv_obj_t* imgCanvas)

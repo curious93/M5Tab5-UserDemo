@@ -1,171 +1,216 @@
+/*
+ * Motion Detector — fullscreen camera preview with a bounding-box overlay.
+ *
+ * Architecture (v4 — fluid display):
+ *   Camera task (hal_camera.cpp, Core 1): captures frames, runs PPA mirror,
+ *   publishes ready frames via HalEsp32::consumeReadyFrame(). Never touches
+ *   LVGL directly — zero lock-contention with the LVGL task.
+ *
+ *   lv_timer callback (canvas_refresh_cb, fires every 33 ms inside LVGL task):
+ *   Pulls the latest frame, draws the bbox directly into the RGB565 pixel
+ *   buffer, then calls lv_canvas_set_buffer(). Running inside the LVGL task
+ *   means the lock is already owned — no cross-task wait.
+ *
+ *   app_main loop: trivial 1-second sleep; all real work is in the two tasks.
+ */
 #include <stdio.h>
-#include <math.h>
+#include <algorithm>
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "hal/hal_esp32.h"
 #include "lvgl.h"
 #include "esp_log.h"
 #include "esp_lvgl_port.h"
+#include "hal/components/motion_detector.h"
 
-static const char *TAG = "app";
+static const char* TAG = "app";
 static HalEsp32 device_hal;
-extern float vision_target_x;
-extern float vision_target_y;
-extern bool vision_detected;
 
-// UI Elements
-static lv_obj_t * eye_l;
-static lv_obj_t * eye_r;
-static lv_obj_t * pupil_l;
-static lv_obj_t * pupil_r;
-static lv_obj_t * mouth;
+// Display geometry.
+static constexpr int SCREEN_W = 1280;
+static constexpr int SCREEN_H = 720;
 
-static void update_avatar(bool touched, int px, int py, float ax, float ay) {
-    if (touched) {
-        // Augen verengen bei Berührung
-        lv_obj_set_height(eye_l, 10);
-        lv_obj_set_height(eye_r, 10);
-        lv_obj_set_style_bg_color(mouth, lv_color_hex(0x00FF00), 0); // Grüner Mund
-        lv_obj_add_flag(pupil_l, LV_OBJ_FLAG_HIDDEN);
-        lv_obj_add_flag(pupil_r, LV_OBJ_FLAG_HIDDEN);
-    } else {
-        // Normale Augen
-        lv_obj_set_height(eye_l, 80);
-        lv_obj_set_height(eye_r, 80);
-        lv_obj_set_style_bg_color(mouth, lv_color_hex(0x00AAFF), 0); // Blauer Mund
-        lv_obj_remove_flag(pupil_l, LV_OBJ_FLAG_HIDDEN);
-        lv_obj_remove_flag(pupil_r, LV_OBJ_FLAG_HIDDEN);
+// Bounding box appearance.
+static constexpr int BOX_BORDER_MIN = 3;
+static constexpr int BOX_BORDER_MAX = 8;
+static constexpr int BOX_MIN_W      = 60;
+static constexpr int BOX_MIN_H      = 60;
 
-        // Pupillen-Bewegung basierend auf IMU (Tilt)
-        // Pupillen-Bewegung: Vision hat Priorität vor IMU (Tilt)
-        int move_x, move_y;
-        if (vision_detected) {
-            move_x = (int)(vision_target_x * 40.0f);
-            move_y = (int)(vision_target_y * 45.0f);
-        } else {
-            move_x = (int)(ax * 30.0f);
-            move_y = (int)((ay + 0.5f) * 40.0f); 
+// Intensity scaling: moved_pixels count that maps to maximum border width.
+static constexpr int INTENSITY_FULL_PX = 1500;
+
+// RGB565 colours for the bbox drawn directly into the pixel buffer.
+// 0x00E5FF (cyan) → R5=0, G6=57, B5=31 → (0<<11)|(57<<5)|31 = 0x073F
+// 0x444455 (dim)  → R5=8, G6=17, B5=10 → (8<<11)|(17<<5)|10 = 0x422A
+static constexpr uint16_t COL_ACTIVE_565 = 0x073F;
+static constexpr uint16_t COL_IDLE_565   = 0x422A;
+
+// HUD colours (LVGL labels — small, cheap to render).
+static constexpr uint32_t COL_HUD_BG = 0x000000;
+static constexpr uint32_t COL_HUD_FG = 0xB0C8FF;
+
+// UI handles.
+static lv_obj_t* cam_canvas  = nullptr;
+static lv_obj_t* hud_box     = nullptr;
+static lv_obj_t* hud_title   = nullptr;
+static lv_obj_t* hud_status  = nullptr;
+
+// ---------------------------------------------------------------------------
+// Raw RGB565 bounding-box drawing
+// ---------------------------------------------------------------------------
+
+// Draw a rectangle outline `thick` pixels wide into an RGB565 framebuffer.
+// Coordinates are clamped to the frame dimensions before drawing.
+static void draw_bbox_rgb565(uint16_t* fb, int x0, int y0, int x1, int y1,
+                              uint16_t color, int thick)
+{
+    x0 = std::clamp(x0, 0, SCREEN_W - 1);
+    x1 = std::clamp(x1, 0, SCREEN_W - 1);
+    y0 = std::clamp(y0, 0, SCREEN_H - 1);
+    y1 = std::clamp(y1, 0, SCREEN_H - 1);
+    if (x0 >= x1 || y0 >= y1) return;
+
+    for (int t = 0; t < thick; ++t) {
+        // Top and bottom horizontal lines.
+        for (int x = x0; x <= x1; ++x) {
+            int yt = y0 + t;
+            int yb = y1 - t;
+            if (yt < SCREEN_H) fb[yt * SCREEN_W + x] = color;
+            if (yb >= 0)       fb[yb * SCREEN_W + x] = color;
         }
- 
-        lv_obj_set_pos(pupil_l, move_x, move_y);
-        lv_obj_set_pos(pupil_r, move_x, move_y);
-
-        // Mund-Animation (Vibration/Sprechen)
-        static int mouth_phase = 0;
-        int mouth_h = 20 + (int)(sin(mouth_phase * 0.2f) * 10.0f);
-        lv_obj_set_height(mouth, mouth_h);
-        mouth_phase++;
+        // Left and right vertical lines.
+        for (int y = y0; y <= y1; ++y) {
+            int xl = x0 + t;
+            int xr = x1 - t;
+            if (xl < SCREEN_W) fb[y * SCREEN_W + xl] = color;
+            if (xr >= 0)       fb[y * SCREEN_W + xr] = color;
+        }
     }
 }
 
+// ---------------------------------------------------------------------------
+// lv_timer callback — runs inside the LVGL task (no lock acquisition needed)
+// ---------------------------------------------------------------------------
+
+static void canvas_refresh_cb(lv_timer_t*)
+{
+    uint8_t* frame = device_hal.consumeReadyFrame();
+    if (!frame) return;  // camera hasn't produced a new frame yet
+
+    bool det = motion_detector::is_detected();
+
+    if (det) {
+        // Map bbox edges from [-1, 1] to screen pixels.
+        // motion_detector already applies flip_x so coordinates are in
+        // display-space (matching the PPA-mirrored frame).
+        float xmin_n = motion_detector::bbox_x_min();
+        float xmax_n = motion_detector::bbox_x_max();
+        float ymin_n = motion_detector::bbox_y_min();
+        float ymax_n = motion_detector::bbox_y_max();
+
+        int x0 = (int)(SCREEN_W / 2.0f + xmin_n * (SCREEN_W / 2.0f));
+        int x1 = (int)(SCREEN_W / 2.0f + xmax_n * (SCREEN_W / 2.0f));
+        int y0 = (int)(SCREEN_H / 2.0f + ymin_n * (SCREEN_H / 2.0f));
+        int y1 = (int)(SCREEN_H / 2.0f + ymax_n * (SCREEN_H / 2.0f));
+
+        // Enforce minimum box size.
+        if (x1 - x0 < BOX_MIN_W) {
+            int cx = (x0 + x1) / 2;
+            x0 = cx - BOX_MIN_W / 2;
+            x1 = cx + BOX_MIN_W / 2;
+        }
+        if (y1 - y0 < BOX_MIN_H) {
+            int cy = (y0 + y1) / 2;
+            y0 = cy - BOX_MIN_H / 2;
+            y1 = cy + BOX_MIN_H / 2;
+        }
+
+        // Border width scales with motion intensity.
+        int moved = motion_detector::moved_pixels();
+        int span  = BOX_BORDER_MAX - BOX_BORDER_MIN;
+        int add   = std::min((moved * span) / INTENSITY_FULL_PX, span);
+        int thick = BOX_BORDER_MIN + add;
+
+        draw_bbox_rgb565(reinterpret_cast<uint16_t*>(frame),
+                         x0, y0, x1, y1, COL_ACTIVE_565, thick);
+    }
+
+    lv_canvas_set_buffer(cam_canvas, frame, SCREEN_W, SCREEN_H,
+                         LV_COLOR_FORMAT_RGB565);
+
+    char buf[64];
+    snprintf(buf, sizeof(buf), "detected=%s  moved=%5d px",
+             det ? "YES" : " no", motion_detector::moved_pixels());
+    lv_label_set_text(hud_status, buf);
+}
+
+// ---------------------------------------------------------------------------
+// Entry point
+// ---------------------------------------------------------------------------
+
 extern "C" void app_main(void)
 {
-    ESP_LOGI(TAG, "Initializing Robo-Avatar with IMU Sensing...");
+    ESP_LOGI(TAG, "Motion Detector v4 starting...");
 
     device_hal.init();
 
-    lv_display_t * lvDisp = device_hal.lvDisp;
+    lv_display_t* lvDisp = device_hal.lvDisp;
     if (lvDisp == NULL) {
         ESP_LOGE(TAG, "Failed to get display handle!");
         return;
     }
 
     if (lvgl_port_lock(-1)) {
-        lv_obj_t * scr = lv_scr_act();
+        lv_obj_t* scr = lv_scr_act();
         lv_obj_set_style_bg_color(scr, lv_color_hex(0x000000), 0);
         lv_obj_set_style_bg_opa(scr, LV_OPA_COVER, 0);
 
-        // Gesicht-Container
-        lv_obj_t * face = lv_obj_create(scr);
-        lv_obj_set_size(face, 1280, 720);
-        lv_obj_set_style_bg_opa(face, 0, 0);
-        lv_obj_set_style_border_width(face, 0, 0);
-        lv_obj_center(face);
-
-        // Linkes Auge
-        eye_l = lv_obj_create(face);
-        lv_obj_set_size(eye_l, 100, 80);
-        lv_obj_align(eye_l, LV_ALIGN_CENTER, -200, -50);
-        lv_obj_set_style_bg_color(eye_l, lv_color_hex(0x00AAFF), 0);
-        lv_obj_set_style_radius(eye_l, 40, 0);
-        lv_obj_set_style_clip_corner(eye_l, true, 0); // Wichtig für Pupillen
-
-        pupil_l = lv_obj_create(eye_l);
-        lv_obj_set_size(pupil_l, 30, 30);
-        lv_obj_center(pupil_l);
-        lv_obj_set_style_bg_color(pupil_l, lv_color_hex(0xFFFFFF), 0);
-        lv_obj_set_style_radius(pupil_l, LV_RADIUS_CIRCLE, 0);
-
-        // Rechtes Auge
-        eye_r = lv_obj_create(face);
-        lv_obj_set_size(eye_r, 100, 80);
-        lv_obj_align(eye_r, LV_ALIGN_CENTER, 200, -50);
-        lv_obj_set_style_bg_color(eye_r, lv_color_hex(0x00AAFF), 0);
-        lv_obj_set_style_radius(eye_r, 40, 0);
-        lv_obj_set_style_clip_corner(eye_r, true, 0);
-
-        pupil_r = lv_obj_create(eye_r);
-        lv_obj_set_size(pupil_r, 30, 30);
-        lv_obj_center(pupil_r);
-        lv_obj_set_style_bg_color(pupil_r, lv_color_hex(0xFFFFFF), 0);
-        lv_obj_set_style_radius(pupil_r, LV_RADIUS_CIRCLE, 0);
-
-        // Mund
-        mouth = lv_obj_create(face);
-        lv_obj_set_size(mouth, 400, 20);
-        lv_obj_align(mouth, LV_ALIGN_CENTER, 0, 150);
-        lv_obj_set_style_bg_color(mouth, lv_color_hex(0x00AAFF), 0);
-        lv_obj_set_style_radius(mouth, 10, 0);
-
-        // Status Text
-        lv_obj_t * label = lv_label_create(scr);
-        lv_label_set_text(label, "ROBO-AVATAR V2.0\nVISION ACTIVATED");
-        lv_obj_set_style_text_color(label, lv_color_hex(0x666666), 0);
-        lv_obj_set_style_text_align(label, LV_TEXT_ALIGN_CENTER, 0);
-        lv_obj_align(label, LV_ALIGN_BOTTOM_MID, 0, -50);
-
-        // Camera Canvas (Hidden or background)
-        lv_obj_t* cam_canvas = lv_canvas_create(scr);
-        lv_obj_set_size(cam_canvas, 1280, 720);
+        // Fullscreen camera canvas — pixel data is swapped in by canvas_refresh_cb.
+        cam_canvas = lv_canvas_create(scr);
+        lv_obj_set_size(cam_canvas, SCREEN_W, SCREEN_H);
         lv_obj_align(cam_canvas, LV_ALIGN_CENTER, 0, 0);
-        lv_obj_move_background(cam_canvas); // Put behind eyes
 
-        // Start Camera
+        // HUD (top-left).
+        hud_box = lv_obj_create(scr);
+        lv_obj_set_size(hud_box, 440, 88);
+        lv_obj_set_pos(hud_box, 16, 16);
+        lv_obj_set_style_bg_color(hud_box, lv_color_hex(COL_HUD_BG), 0);
+        lv_obj_set_style_bg_opa(hud_box, 170, 0);
+        lv_obj_set_style_border_width(hud_box, 1, 0);
+        lv_obj_set_style_border_color(hud_box, lv_color_hex(COL_HUD_FG), 0);
+        lv_obj_set_style_border_opa(hud_box, 80, 0);
+        lv_obj_set_style_radius(hud_box, 6, 0);
+        lv_obj_set_style_pad_all(hud_box, 10, 0);
+        lv_obj_remove_flag(hud_box, LV_OBJ_FLAG_SCROLLABLE);
+        lv_obj_remove_flag(hud_box, LV_OBJ_FLAG_CLICKABLE);
+
+        hud_title = lv_label_create(hud_box);
+        lv_label_set_text(hud_title, "MOTION DETECTOR");
+        lv_obj_set_style_text_color(hud_title, lv_color_hex(COL_HUD_FG), 0);
+        lv_obj_set_style_text_font(hud_title, &lv_font_montserrat_24, 0);
+        lv_obj_align(hud_title, LV_ALIGN_TOP_LEFT, 0, 0);
+
+        hud_status = lv_label_create(hud_box);
+        lv_label_set_text(hud_status, "detected= no  moved=    0 px");
+        lv_obj_set_style_text_color(hud_status, lv_color_hex(COL_HUD_FG), 0);
+        lv_obj_set_style_text_font(hud_status, &lv_font_montserrat_16, 0);
+        lv_obj_align(hud_status, LV_ALIGN_TOP_LEFT, 0, 36);
+
+        // Register the display refresh timer (30 fps target).
+        // Runs inside the LVGL task — no cross-task lock needed.
+        lv_timer_create(canvas_refresh_cb, 33, nullptr);
+
+        // Start camera capture (spawns camera task on Core 1).
         device_hal.startCameraCapture(cam_canvas);
 
         lvgl_port_unlock();
     }
 
-    ESP_LOGI(TAG, "Robo-Avatar UI Ready.");
+    ESP_LOGI(TAG, "Motion Detector UI ready.");
 
-    int log_counter = 0;
+    // Camera task and LVGL task handle everything.
+    // app_main just stays alive to keep the FreeRTOS scheduler happy.
     while (1) {
-        lv_indev_t * indev = lv_indev_get_next(NULL);
-        lv_indev_data_t data_indev;
-        bool touched = false;
-        int px = 0, py = 0;
-
-        if (indev) {
-            lv_indev_get_point(indev, &data_indev.point);
-            touched = (lv_indev_get_state(indev) == LV_INDEV_STATE_PRESSED);
-            px = data_indev.point.x;
-            py = data_indev.point.y;
-        }
-        
-        // IMU Updates
-        device_hal.updateImuData();
-        auto& imu = device_hal.imuData;
-        
-        if (lvgl_port_lock(-1)) {
-            update_avatar(touched, px, py, imu.accelX, imu.accelY);
-            lvgl_port_unlock();
-        }
-
-        if (log_counter++ >= 33) { // ca. 1 Sekunde bei 30ms Delay
-            ESP_LOGI(TAG, "IMU Accel: X=%.2f, Y=%.2f, Z=%.2f", imu.accelX, imu.accelY, imu.accelZ);
-            log_counter = 0;
-        }
-
-        vTaskDelay(pdMS_TO_TICKS(30));
+        vTaskDelay(pdMS_TO_TICKS(1000));
     }
 }
