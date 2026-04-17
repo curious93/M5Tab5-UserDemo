@@ -700,6 +700,12 @@ CONFIG_PARTITION_TABLE_MD5=y
 # end of Partition Table
 
 #
+# CSpot (Spotify Connect)
+#
+CONFIG_CSPOT_DEVICE_NAME="M5Tab5"
+# end of CSpot (Spotify Connect)
+
+#
 # Compiler options
 #
 # CONFIG_COMPILER_OPTIMIZATION_DEBUG is not set

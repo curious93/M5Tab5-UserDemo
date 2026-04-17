@@ -53,3 +53,16 @@ CONFIG_ESP_HOSTED_SDIO_GPIO_RESET_SLAVE=15
 CONFIG_ESP_HOSTED_SDIO_4_BIT_BUS=y
 CONFIG_ESP_HOSTED_SDIO_BUS_WIDTH=4
 CONFIG_ESP_HOSTED_SDIO_CLOCK_FREQ_KHZ=40000
+
+# cspot memory strategy (squeezelite approach)
+# Hardware AES with correct DMA allocation — prevents pool exhaustion
+CONFIG_MBEDTLS_HARDWARE_AES=y
+# Allow mbedTLS to use PSRAM for large buffers
+CONFIG_MBEDTLS_EXTERNAL_MEM_ALLOC=y
+# Reduced TLS buffer sizes to save SRAM (cspot uses Vorbis ~4KB frames)
+CONFIG_MBEDTLS_SSL_IN_CONTENT_LEN=8192
+CONFIG_MBEDTLS_SSL_OUT_CONTENT_LEN=4096
+# Keep small allocs (AES DMA bufs) in SRAM, large ones go to PSRAM
+CONFIG_SPIRAM_MALLOC_ALWAYSINTERNAL=4096
+# Enable C++ exceptions (required by cspot)
+CONFIG_COMPILER_CXX_EXCEPTIONS=y

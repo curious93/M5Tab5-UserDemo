@@ -1,0 +1,9 @@
+menu "CSpot (Spotify Connect)"
+
+    config CSPOT_DEVICE_NAME
+        string "Device name visible in Spotify"
+        default "M5Tab5"
+        help
+            Name shown to Spotify clients when choosing a speaker.
+
+endmenu

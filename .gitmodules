@@ -1,0 +1,3 @@
+[submodule "M5Tab5-UserDemo-Reference/platforms/tab5/components/cspot"]
+	path = M5Tab5-UserDemo-Reference/platforms/tab5/components/cspot
+	url = https://github.com/feelfreelinux/cspot
