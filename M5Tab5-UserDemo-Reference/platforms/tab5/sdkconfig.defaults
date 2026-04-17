@@ -4,7 +4,7 @@ CONFIG_ESPTOOLPY_FLASHSIZE_16MB=y
 CONFIG_PARTITION_TABLE_CUSTOM=y
 CONFIG_COMPILER_OPTIMIZATION_PERF=y
 CONFIG_SPIRAM=y
-CONFIG_SPIRAM_SPEED_120M=y
+CONFIG_SPIRAM_SPEED_200M=y
 CONFIG_SPIRAM_XIP_FROM_PSRAM=y
 CONFIG_CACHE_L2_CACHE_256KB=y
 CONFIG_CACHE_L2_CACHE_LINE_128B=y
@@ -54,15 +54,19 @@ CONFIG_ESP_HOSTED_SDIO_4_BIT_BUS=y
 CONFIG_ESP_HOSTED_SDIO_BUS_WIDTH=4
 CONFIG_ESP_HOSTED_SDIO_CLOCK_FREQ_KHZ=40000
 
+# Allow old I2C cmd API (bell's ESP sinks) to coexist with new driver_ng (BSP)
+CONFIG_I2C_SKIP_LEGACY_CONFLICT_CHECK=y
+# Allow task stacks in PSRAM (needed after cspot's BSS grows internal heap pressure)
+CONFIG_FREERTOS_TASK_CREATE_ALLOW_EXT_MEM=y
+
 # cspot memory strategy (squeezelite approach)
-# Hardware AES with correct DMA allocation — prevents pool exhaustion
+# Hardware AES with correct DMA allocation — mbedtls uses MALLOC_CAP_DMA internally
 CONFIG_MBEDTLS_HARDWARE_AES=y
-# Allow mbedTLS to use PSRAM for large buffers
+# Allow mbedTLS to use PSRAM for large TLS record buffers
 CONFIG_MBEDTLS_EXTERNAL_MEM_ALLOC=y
-# Reduced TLS buffer sizes to save SRAM (cspot uses Vorbis ~4KB frames)
+# Reduced TLS buffer sizes — cspot Vorbis frames are ~4KB
 CONFIG_MBEDTLS_SSL_IN_CONTENT_LEN=8192
 CONFIG_MBEDTLS_SSL_OUT_CONTENT_LEN=4096
-# Keep small allocs (AES DMA bufs) in SRAM, large ones go to PSRAM
-CONFIG_SPIRAM_MALLOC_ALWAYSINTERNAL=4096
 # Enable C++ exceptions (required by cspot)
 CONFIG_COMPILER_CXX_EXCEPTIONS=y
+CONFIG_CODEC_I2C_BACKWARD_COMPATIBLE=n
