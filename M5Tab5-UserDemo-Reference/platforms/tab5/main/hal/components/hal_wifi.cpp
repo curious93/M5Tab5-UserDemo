@@ -18,12 +18,41 @@
 #include <nvs_flash.h>
 #include <esp_netif.h>
 #include <esp_http_server.h>
+#include <lwip/dns.h>
+#include <lwip/ip_addr.h>
 
 #define TAG "wifi"
 
 #define WIFI_SSID    "M5Tab5-UserDemo-WiFi"
 #define WIFI_PASS    ""
 #define MAX_STA_CONN 4
+
+// ── STA event handling ────────────────────────────────────────────────────────
+static volatile bool s_sta_connected = false;
+
+static void sta_event_handler(void* arg, esp_event_base_t base,
+                               int32_t id, void* data)
+{
+    if (base == WIFI_EVENT && id == WIFI_EVENT_STA_START) {
+        esp_wifi_connect();
+    } else if (base == WIFI_EVENT && id == WIFI_EVENT_STA_DISCONNECTED) {
+        s_sta_connected = false;
+        ESP_LOGW(TAG, "STA disconnected, retrying...");
+        esp_wifi_connect();
+    } else if (base == IP_EVENT && id == IP_EVENT_STA_GOT_IP) {
+        auto* ev = static_cast<ip_event_got_ip_t*>(data);
+        ESP_LOGI(TAG, "STA got IP: " IPSTR, IP2STR(&ev->ip_info.ip));
+        // Explicitly set Google DNS — ESP-Hosted sometimes doesn't propagate
+        // the DHCP-provided DNS server to lwIP
+        ip_addr_t dns1, dns2;
+        IP_ADDR4(&dns1, 8, 8, 8, 8);
+        IP_ADDR4(&dns2, 8, 8, 4, 4);
+        dns_setserver(0, &dns1);
+        dns_setserver(1, &dns2);
+        ESP_LOGI(TAG, "DNS set to 8.8.8.8 / 8.8.4.4");
+        s_sta_connected = true;
+    }
+}
 
 // HTTP 处理函数
 esp_err_t hello_get_handler(httpd_req_t* req)
@@ -149,4 +178,101 @@ bool HalEsp32::getExtAntennaEnable()
 void HalEsp32::startWifiAp()
 {
     wifi_init();
+}
+
+// ── STA init task ─────────────────────────────────────────────────────────────
+// The Tab5 WiFi runs on an ESP32-C6 slave via SDIO (ESP-Hosted).
+// startWifiSta() may be the very first WiFi call — wifi_init() / startWifiAp()
+// is NOT called at boot.  This task owns the full init sequence.
+// We MUST NOT call esp_wifi_stop() — it sends an SDIO command that panics when
+// the transport isn't fully up, causing heap corruption (tlsf_free assert).
+struct StaInitArgs {
+    char ssid[32];
+    char pass[64];
+};
+
+static void sta_init_task(void* arg)
+{
+    auto* a = static_cast<StaInitArgs*>(arg);
+    ESP_LOGI(TAG, "sta_init_task: SSID=%s", a->ssid);
+
+    // ── One-time WiFi stack init ──────────────────────────────────────────
+    static bool s_wifi_init_done = false;
+    if (!s_wifi_init_done) {
+        // nvs_flash_init() was already called in HalEsp32::wifi_init(); call
+        // again in case that path was skipped — ESP-IDF silently returns OK.
+        esp_err_t ret = nvs_flash_init();
+        if (ret == ESP_ERR_NVS_NO_FREE_PAGES || ret == ESP_ERR_NVS_NEW_VERSION_FOUND) {
+            nvs_flash_erase();
+            nvs_flash_init();
+        }
+
+        // esp_netif_init / event_loop may already be done; ignore "already init".
+        esp_netif_init();
+        esp_event_loop_create_default();
+
+        wifi_init_config_t cfg = WIFI_INIT_CONFIG_DEFAULT();
+        esp_err_t err = esp_wifi_init(&cfg);
+        if (err != ESP_OK) {
+            ESP_LOGE(TAG, "esp_wifi_init: %s", esp_err_to_name(err));
+            delete a; vTaskDelete(nullptr); return;
+        }
+        s_wifi_init_done = true;
+        ESP_LOGI(TAG, "WiFi driver initialized");
+    }
+
+    // ── STA netif (once) ─────────────────────────────────────────────────
+    static bool s_sta_netif_created = false;
+    if (!s_sta_netif_created) {
+        esp_netif_create_default_wifi_sta();
+        s_sta_netif_created = true;
+    }
+
+    // ── Event handlers ────────────────────────────────────────────────────
+    esp_event_handler_register(WIFI_EVENT, ESP_EVENT_ANY_ID,
+                                &sta_event_handler, nullptr);
+    esp_event_handler_register(IP_EVENT, IP_EVENT_STA_GOT_IP,
+                                &sta_event_handler, nullptr);
+
+    // ── Set STA mode + config BEFORE start (standard sequence) ───────────
+    esp_err_t err = esp_wifi_set_mode(WIFI_MODE_STA);
+    if (err != ESP_OK) {
+        ESP_LOGE(TAG, "set_mode STA: %s", esp_err_to_name(err));
+        delete a; vTaskDelete(nullptr); return;
+    }
+
+    wifi_config_t sta_cfg = {};
+    memcpy(sta_cfg.sta.ssid,     a->ssid, sizeof(sta_cfg.sta.ssid));
+    memcpy(sta_cfg.sta.password, a->pass, sizeof(sta_cfg.sta.password));
+    delete a;
+
+    err = esp_wifi_set_config(WIFI_IF_STA, &sta_cfg);
+    if (err != ESP_OK) {
+        ESP_LOGE(TAG, "set_config: %s", esp_err_to_name(err));
+        vTaskDelete(nullptr); return;
+    }
+
+    // ── Start WiFi — fires WIFI_EVENT_STA_START → sta_event_handler connects
+    err = esp_wifi_start();
+    if (err != ESP_OK) {
+        ESP_LOGE(TAG, "esp_wifi_start: %s", esp_err_to_name(err));
+        vTaskDelete(nullptr); return;
+    }
+
+    ESP_LOGI(TAG, "STA started, awaiting IP...");
+    vTaskDelete(nullptr);
+}
+
+void HalEsp32::startWifiSta(const char* ssid, const char* pass)
+{
+    ESP_LOGI(TAG, "startWifiSta requested: SSID=%s", ssid);
+    auto* args = new StaInitArgs{};
+    memcpy(args->ssid, ssid, sizeof(args->ssid));
+    memcpy(args->pass, pass, sizeof(args->pass));
+    xTaskCreate(sta_init_task, "sta_init", 4096, args, 5, nullptr);
+}
+
+bool HalEsp32::isWifiStaConnected()
+{
+    return s_sta_connected;
 }
