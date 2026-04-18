@@ -71,8 +71,11 @@ CONFIG_I2C_SKIP_LEGACY_CONFLICT_CHECK=y
 CONFIG_FREERTOS_TASK_CREATE_ALLOW_EXT_MEM=y
 
 # cspot memory strategy (squeezelite approach)
-# Hardware AES with correct DMA allocation — mbedtls uses MALLOC_CAP_DMA internally
-CONFIG_MBEDTLS_HARDWARE_AES=y
+# Hardware AES disabled: with HW-AES enabled, mbedtls_aes_crypt_ctr hangs when
+# given SRAM scratch buffers (likely DMA init issue on P4 Rev 1.3). Software
+# AES is slower but works from any heap region including the PSRAM track
+# prefetch buffers.
+# CONFIG_MBEDTLS_HARDWARE_AES=n
 # Allow mbedTLS to use PSRAM for large TLS record buffers
 CONFIG_MBEDTLS_EXTERNAL_MEM_ALLOC=y
 # Reduced TLS buffer sizes — cspot Vorbis frames are ~4KB
