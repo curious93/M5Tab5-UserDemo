@@ -18,7 +18,6 @@
 #include <nvs_flash.h>
 #include <esp_netif.h>
 #include <esp_http_server.h>
-#include <driver/gpio.h>
 #include <lwip/dns.h>
 #include <lwip/ip_addr.h>
 
@@ -196,33 +195,6 @@ static void sta_init_task(void* arg)
 {
     auto* a = static_cast<StaInitArgs*>(arg);
     ESP_LOGI(TAG, "sta_init_task: SSID=%s", a->ssid);
-
-    // ── Hard-reset the ESP32-C6 WiFi slave via GPIO15 ────────────────────
-    // The built-in esp_hosted reset pulses only 50 ms which isn't always
-    // enough for a stuck C6. Apply a longer, symmetric pulse:
-    //   500 ms LOW (C6 held in reset)  →  200 ms HIGH (C6 boots cleanly)
-    // Must happen BEFORE esp_wifi_init / esp_hosted_init.
-    static bool s_c6_hard_reset_done = false;
-    if (!s_c6_hard_reset_done) {
-        constexpr gpio_num_t C6_RESET_GPIO = GPIO_NUM_15;
-        gpio_config_t io = {
-            .pin_bit_mask = 1ULL << C6_RESET_GPIO,
-            .mode         = GPIO_MODE_OUTPUT,
-            .pull_up_en   = GPIO_PULLUP_DISABLE,
-            .pull_down_en = GPIO_PULLDOWN_DISABLE,
-            .intr_type    = GPIO_INTR_DISABLE,
-        };
-        gpio_config(&io);
-        gpio_set_level(C6_RESET_GPIO, 0);           // assert reset
-        vTaskDelay(pdMS_TO_TICKS(500));
-        gpio_set_level(C6_RESET_GPIO, 1);           // release
-        // C6 ROM bootloader + firmware needs ~2 s to be ready for SDIO.
-        // Factory image reaches SDIO init at ~7.5 s uptime; ours was at ~3.5 s
-        // which raced the C6 and caused "sdio card init failed" + null-deref.
-        vTaskDelay(pdMS_TO_TICKS(2500));
-        ESP_LOGI(TAG, "C6 slave: hard reset (500ms LOW + 2500ms HIGH)");
-        s_c6_hard_reset_done = true;
-    }
 
     // ── One-time WiFi stack init ──────────────────────────────────────────
     static bool s_wifi_init_done = false;
