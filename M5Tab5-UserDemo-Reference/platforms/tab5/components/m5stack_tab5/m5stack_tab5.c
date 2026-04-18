@@ -1558,7 +1558,7 @@ static lv_display_t* bsp_display_lcd_init(const bsp_display_cfg_t* cfg)
          .buff_dma    = cfg->flags.buff_dma,
          .buff_spiram = cfg->flags.buff_spiram,
 #if LVGL_VERSION_MAJOR >= 9
-         .swap_bytes = (BSP_LCD_BIGENDIAN ? true : false),
+         .swap_bytes = true, /* ST7123 MIPI DSI expects byte-swapped RGB565 */
 #endif
 #if CONFIG_BSP_DISPLAY_LVGL_AVOID_TEAR
          .sw_rotate = false, /* Avoid tearing is not supported for SW rotation */

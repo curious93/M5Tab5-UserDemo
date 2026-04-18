@@ -6,8 +6,9 @@
 
 namespace {
 
-constexpr int SCREEN_W     = 720;   // portrait
-constexpr int SCREEN_H     = 1280;
+// Fixed landscape dimensions after LV_DISPLAY_ROTATION_90.
+static int SCREEN_W = 1280;
+static int SCREEN_H = 720;
 constexpr int HEADER_H     = 96;
 constexpr int GRID_COLS    = 3;
 constexpr int GRID_ROWS    = 4;
@@ -17,11 +18,11 @@ constexpr int ICON_PAD     = 24;
 constexpr int LABEL_GAP    = 8;
 constexpr int LABEL_H      = 28;
 
-constexpr uint32_t COL_BG        = 0x0F1420;
-constexpr uint32_t COL_HEADER_BG = 0x1B2236;
-constexpr uint32_t COL_TEXT      = 0xE6EEFF;
-constexpr uint32_t COL_MUTED     = 0x5A6A85;
-constexpr uint32_t COL_EMPTY     = 0x242C3E;
+constexpr uint32_t COL_BG        = 0xFF0000;  // TEST: bright red
+constexpr uint32_t COL_HEADER_BG = 0x0000FF;  // TEST: bright blue
+constexpr uint32_t COL_TEXT      = 0xFFFF00;  // TEST: yellow
+constexpr uint32_t COL_MUTED     = 0x00FF00;  // TEST: bright green
+constexpr uint32_t COL_EMPTY     = 0xFF00FF;  // TEST: magenta
 
 const char* TAG = "launcher";
 
@@ -104,9 +105,15 @@ void AppLauncher::requestLaunch(int registry_index)
 
 void AppLauncher::buildUI()
 {
-    if (lvgl_port_lock(-1) == false) return;
+    if (lvgl_port_lock(-1) == false) {
+        ESP_LOGE(TAG, "buildUI: lvgl_port_lock FAILED — no UI drawn");
+        return;
+    }
 
     lv_obj_t* scr = lv_scr_act();
+    int w = lv_display_get_horizontal_resolution(lv_obj_get_display(scr));
+    int h = lv_display_get_vertical_resolution(lv_obj_get_display(scr));
+    ESP_LOGI(TAG, "buildUI: screen=%dx%d  using SCREEN_W=%d SCREEN_H=%d", w, h, SCREEN_W, SCREEN_H);
     lv_obj_set_style_bg_color(scr, lv_color_hex(COL_BG), 0);
     lv_obj_set_style_bg_opa(scr, LV_OPA_COVER, 0);
 
@@ -117,6 +124,7 @@ void AppLauncher::buildUI()
     lv_obj_set_style_bg_color(_root, lv_color_hex(COL_BG), 0);
     lv_obj_set_style_bg_opa(_root, LV_OPA_COVER, 0);
     lv_obj_clear_flag(_root, LV_OBJ_FLAG_SCROLLABLE);
+    ESP_LOGI(TAG, "buildUI: root created %dx%d COL_BG=0x%06lX", SCREEN_W, SCREEN_H, (unsigned long)COL_BG);
 
     // Header bar
     lv_obj_t* header = lv_obj_create(_root);

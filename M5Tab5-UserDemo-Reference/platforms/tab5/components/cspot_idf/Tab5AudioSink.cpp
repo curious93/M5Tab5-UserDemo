@@ -27,6 +27,7 @@ bool Tab5AudioSink::setParams(uint32_t sampleRate, uint8_t channelCount, uint8_t
         return false;
     }
 
+    if (codec->set_mute) codec->set_mute(false);
     ESP_LOGI(TAG, "audio params: %lu Hz, %u ch, %u bit", (unsigned long)sampleRate, channelCount, bitDepth);
     return true;
 }

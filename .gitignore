@@ -10,3 +10,6 @@ __pycache__/
 snap_anker_*.jpg
 boot_log.txt
 
+
+# Local Claude Code state (local permissions, scheduled task locks)
+.claude/

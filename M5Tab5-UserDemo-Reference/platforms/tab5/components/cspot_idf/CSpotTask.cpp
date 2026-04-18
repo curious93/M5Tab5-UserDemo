@@ -12,9 +12,46 @@
 
 #include <esp_log.h>
 #include <esp_wifi.h>
+#include <esp_netif.h>
 #include <mdns.h>
 #include <nvs_flash.h>
+#include <nvs.h>
 #include <nlohmann/json.hpp>
+
+namespace {
+constexpr const char* NVS_NS  = "cspot";
+constexpr const char* NVS_KEY = "blob_json";
+
+bool loadStoredBlob(std::string& out) {
+    nvs_handle_t h;
+    if (nvs_open(NVS_NS, NVS_READONLY, &h) != ESP_OK) return false;
+    size_t len = 0;
+    esp_err_t err = nvs_get_str(h, NVS_KEY, nullptr, &len);
+    if (err != ESP_OK || len == 0) { nvs_close(h); return false; }
+    out.resize(len);
+    err = nvs_get_str(h, NVS_KEY, out.data(), &len);
+    nvs_close(h);
+    if (err != ESP_OK) return false;
+    if (!out.empty() && out.back() == '\0') out.pop_back();
+    return true;
+}
+
+void saveStoredBlob(const std::string& json) {
+    nvs_handle_t h;
+    if (nvs_open(NVS_NS, NVS_READWRITE, &h) != ESP_OK) return;
+    nvs_set_str(h, NVS_KEY, json.c_str());
+    nvs_commit(h);
+    nvs_close(h);
+}
+
+void eraseStoredBlob() {
+    nvs_handle_t h;
+    if (nvs_open(NVS_NS, NVS_READWRITE, &h) != ESP_OK) return;
+    nvs_erase_key(h, NVS_KEY);
+    nvs_commit(h);
+    nvs_close(h);
+}
+}  // namespace
 
 #include <atomic>
 #include <memory>
@@ -91,7 +128,7 @@ void CSpotPlayer::runTask() {
 
 // ── CSpotTask ─────────────────────────────────────────────────────────────────
 CSpotTask::CSpotTask(const std::string& deviceName)
-    : bell::Task("cspot_main", 32 * 1024, 4, 1)
+    : bell::Task("cspot_main", 64 * 1024, 4, 1)
     , _deviceName(deviceName)
 {
     startTask();
@@ -110,6 +147,20 @@ void CSpotTask::runTask() {
     auto blob = std::make_shared<cspot::LoginBlob>(_deviceName);
 
     std::atomic<bool> gotBlob{false};
+
+    // Try stored credentials first (auto-login after one-time ZeroConf claim)
+    std::string storedJson;
+    if (loadStoredBlob(storedJson)) {
+        try {
+            blob->loadJson(storedJson);
+            gotBlob = true;
+            ESP_LOGI(TAG, "loaded stored credentials for user '%s', skipping ZeroConf",
+                     blob->getUserName().c_str());
+        } catch (...) {
+            ESP_LOGW(TAG, "stored credentials invalid, clearing");
+            eraseStoredBlob();
+        }
+    }
 
     auto server = std::make_unique<bell::BellHTTPServer>(8080);
 
@@ -154,17 +205,74 @@ void CSpotTask::runTask() {
 
     ESP_LOGI(TAG, "credentials received, authenticating...");
 
+    // Wait for WiFi STA to have an IP before touching the network.
+    // (When NVS-stored creds short-circuit the ZeroConf wait, we may reach here
+    // before STA is up.)
+    esp_netif_t* sta = esp_netif_get_handle_from_ifkey("WIFI_STA_DEF");
+    esp_netif_ip_info_t ip{};
+    for (int i = 0; i < 60; ++i) {
+        if (sta && esp_netif_get_ip_info(sta, &ip) == ESP_OK && ip.ip.addr != 0) break;
+        BELL_SLEEP_MS(500);
+    }
+    if (ip.ip.addr == 0) {
+        ESP_LOGE(TAG, "no IP after 30s, aborting cspot");
+        s_running = false;
+        return;
+    }
+    ESP_LOGI(TAG, "STA ready, ip=" IPSTR, IP2STR(&ip.ip));
+
+    // After IP assignment DNS/routing may still be settling. Give it a moment.
+    BELL_SLEEP_MS(2000);
+
     auto ctx = cspot::Context::createFromBlob(blob);
-    ctx->session->connectWithRandomAp();
-    auto token = ctx->session->authenticate(blob);
+
+    // Retry AP connection on transient network failures
+    bool ap_ok = false;
+    for (int attempt = 0; attempt < 5; ++attempt) {
+        try {
+            ctx->session->connectWithRandomAp();
+            ap_ok = true;
+            break;
+        } catch (std::exception& e) {
+            ESP_LOGW(TAG, "AP connect attempt %d failed: %s, retrying", attempt+1, e.what());
+            BELL_SLEEP_MS(2000);
+        }
+    }
+    if (!ap_ok) {
+        ESP_LOGE(TAG, "could not reach any Spotify AP, aborting");
+        s_running = false;
+        return;
+    }
+
+    std::vector<uint8_t> token;
+    try {
+        token = ctx->session->authenticate(blob);
+    } catch (std::exception& e) {
+        ESP_LOGE(TAG, "authenticate threw: %s", e.what());
+        eraseStoredBlob();
+        s_running = false;
+        return;
+    }
 
     if (token.empty()) {
         ESP_LOGE(TAG, "authentication failed");
+        // Wipe stored blob so we fall back to ZeroConf on next boot
+        eraseStoredBlob();
         s_running = false;
         return;
     }
 
     ESP_LOGI(TAG, "authenticated OK");
+
+    // Persist reusable credentials so next boot skips ZeroConf
+    try {
+        blob->authData = token;
+        blob->authType = 1;  // AUTHENTICATION_STORED_SPOTIFY_CREDENTIALS
+        saveStoredBlob(blob->toJson());
+        ESP_LOGI(TAG, "stored reusable credentials to NVS");
+    } catch (...) {
+        ESP_LOGW(TAG, "failed to persist credentials");
+    }
     ctx->session->startTask();
 
     auto handler = std::make_shared<cspot::SpircHandler>(ctx);

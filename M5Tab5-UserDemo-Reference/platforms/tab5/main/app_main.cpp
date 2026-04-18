@@ -1,42 +1,29 @@
-/*
- * App Launcher entry point for the Tab5.
- *
- * Installs the launcher app and pumps the Mooncake scheduler in the main
- * task. UI and input run inside their own LVGL task started by HalEsp32::init().
- */
-#include <memory>
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "esp_log.h"
 #include "hal/hal_esp32.h"
-#include "mooncake.h"
-#include "apps/app_launcher/app_launcher.h"
+#include "cspot_idf.h"
 
 static const char* TAG = "app";
 static HalEsp32 g_hal;
 
-// Simple accessor used by apps (we don't link the hal::Inject singleton).
 HalEsp32* GetTab5Hal() { return &g_hal; }
 
 extern "C" void app_main(void)
 {
-    ESP_LOGI(TAG, "Launcher booting...");
-
+    ESP_LOGI(TAG, "booting...");
     g_hal.init();
 
-    if (g_hal.lvDisp == nullptr) {
-        ESP_LOGE(TAG, "Display init failed");
-        return;
-    }
+    ESP_LOGI(TAG, "starting WiFi STA...");
+    g_hal.startWifiSta("Ingrid", "Loggo03!");
 
-    auto& mc = mooncake::GetMooncake();
-    int launcher_id = mc.installApp(std::make_unique<AppLauncher>(&g_hal));
-    mc.openApp(launcher_id);
+    // Give WiFi time to connect before cspot needs the network
+    vTaskDelay(pdMS_TO_TICKS(5000));
 
-    ESP_LOGI(TAG, "Launcher installed (id=%d)", launcher_id);
+    ESP_LOGI(TAG, "starting cspot...");
+    cspot_start("M5Tab5");
 
     while (true) {
-        mc.update();
-        vTaskDelay(pdMS_TO_TICKS(16));
+        vTaskDelay(pdMS_TO_TICKS(1000));
     }
 }

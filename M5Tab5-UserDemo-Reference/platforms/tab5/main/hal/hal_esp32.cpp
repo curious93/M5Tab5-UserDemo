@@ -71,6 +71,8 @@ void HalEsp32::init()
     ESP_LOGI(_tag.c_str(), "codec init");
     delay(200);
     bsp_codec_init();
+    auto* codec = bsp_get_codec_handle();
+    if (codec && codec->set_mute) codec->set_mute(true);
 
     ESP_LOGI(_tag.c_str(), "imu init");
     imu_init();
@@ -105,6 +107,7 @@ void HalEsp32::init()
     lvDisp = bsp_display_start_with_config(&cfg);
     lv_display_set_rotation(lvDisp, LV_DISPLAY_ROTATION_90);
     bsp_display_backlight_on();
+    bsp_display_brightness_set(25); // reduced for camera color verification
 
     // Touchpad lvgl indev
     ESP_LOGI(_tag.c_str(), "create lvgl touchpad indev");
