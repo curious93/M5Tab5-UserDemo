@@ -32,12 +32,27 @@ bool Tab5AudioSink::setParams(uint32_t sampleRate, uint8_t channelCount, uint8_t
     return true;
 }
 
+static uint32_t s_frames_called = 0;
+static uint32_t s_total_written = 0;
+
 void Tab5AudioSink::feedPCMFrames(const uint8_t* buffer, size_t bytes) {
     auto* codec = bsp_get_codec_handle();
-    if (!codec || !codec->i2s_write) return;
+    if (!codec || !codec->i2s_write) {
+        if ((s_frames_called++ & 0xFF) == 0) {
+            ESP_LOGW(TAG, "feedPCMFrames: codec/i2s_write NULL");
+        }
+        return;
+    }
 
     size_t written = 0;
-    codec->i2s_write((void*)buffer, bytes, &written, portMAX_DELAY);
+    esp_err_t err = codec->i2s_write((void*)buffer, bytes, &written, portMAX_DELAY);
+    s_total_written += written;
+
+    if ((++s_frames_called & 0xFF) == 0) {  // every 256 calls
+        ESP_LOGI(TAG, "feedPCMFrames: calls=%lu, last err=0x%x, asked=%u, written=%u, total=%lu",
+                 (unsigned long)s_frames_called, err, (unsigned)bytes,
+                 (unsigned)written, (unsigned long)s_total_written);
+    }
 }
 
 void Tab5AudioSink::volumeChanged(uint16_t volume) {
