@@ -216,8 +216,11 @@ static void sta_init_task(void* arg)
         gpio_set_level(C6_RESET_GPIO, 0);           // assert reset
         vTaskDelay(pdMS_TO_TICKS(500));
         gpio_set_level(C6_RESET_GPIO, 1);           // release
-        vTaskDelay(pdMS_TO_TICKS(200));
-        ESP_LOGI(TAG, "C6 slave: hard reset (500ms LOW + 200ms HIGH)");
+        // C6 ROM bootloader + firmware needs ~2 s to be ready for SDIO.
+        // Factory image reaches SDIO init at ~7.5 s uptime; ours was at ~3.5 s
+        // which raced the C6 and caused "sdio card init failed" + null-deref.
+        vTaskDelay(pdMS_TO_TICKS(2500));
+        ESP_LOGI(TAG, "C6 slave: hard reset (500ms LOW + 2500ms HIGH)");
         s_c6_hard_reset_done = true;
     }
 
