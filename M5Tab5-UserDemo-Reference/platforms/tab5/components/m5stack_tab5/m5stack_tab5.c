@@ -1408,11 +1408,15 @@ esp_err_t bsp_display_new_with_handles_to_st7123(const bsp_display_config_t* con
     ESP_GOTO_ON_ERROR(esp_lcd_new_panel_io_dbi(mipi_dsi_bus, &dbi_config, &io), err, TAG, "New panel IO failed");
 
     ESP_LOGI(TAG, "Install LCD driver of ST7123");
+    // IMPORTANT: pixel_format must match LVGL's color_format (RGB565 per
+    // CONFIG_BSP_LCD_COLOR_FORMAT_RGB565). Previously set to RGB888, which
+    // caused severe image artifacts because LVGL fed 16bpp pixels into a
+    // 24bpp-configured DPI panel — byte alignment garbage.
     esp_lcd_dpi_panel_config_t dpi_config = {
         .virtual_channel    = 0,
         .dpi_clk_src        = MIPI_DSI_DPI_CLK_SRC_DEFAULT,
         .dpi_clock_freq_mhz = 50,  // Ultra-Safe for Rev 1.3
-        .pixel_format       = LCD_COLOR_PIXEL_FORMAT_RGB888,
+        .pixel_format       = LCD_COLOR_PIXEL_FORMAT_RGB565,
         .num_fbs            = 1,
         .video_timing =
             {
@@ -1446,7 +1450,7 @@ esp_err_t bsp_display_new_with_handles_to_st7123(const bsp_display_config_t* con
         .reset_gpio_num = -1,
         .rgb_ele_order  = LCD_RGB_ELEMENT_ORDER_BGR,
         .data_endian    = LCD_RGB_DATA_ENDIAN_LITTLE,
-        .bits_per_pixel = 24,
+        .bits_per_pixel = 16,  // matches RGB565 dpi pixel_format above
         .vendor_config  = &vendor_config,
     };
 
