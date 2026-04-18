@@ -13,3 +13,6 @@ boot_log.txt
 
 # Local Claude Code state (local permissions, scheduled task locks)
 .claude/
+
+# cspot host-embedded credential header (generated from ~/.claude/tab5/cspot_blob.json)
+generated_blob.h
