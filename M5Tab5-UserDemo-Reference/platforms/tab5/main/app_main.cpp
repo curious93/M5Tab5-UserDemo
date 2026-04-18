@@ -14,11 +14,11 @@ extern "C" void app_main(void)
 {
     ESP_LOGI(TAG, "booting...");
 
-    // Remove IDLE tasks from Task Watchdog — cspot_player does long I2S-blocking
-    // writes which starve IDLE and trip the WDT. Safe because we don't rely on
-    // the IDLE WDT for anything here.
-    esp_task_wdt_delete(xTaskGetIdleTaskHandleForCPU(0));
-    esp_task_wdt_delete(xTaskGetIdleTaskHandleForCPU(1));
+    // cspot_player blocks CPU1 in I2S writes long enough to starve IDLE1,
+    // which trips the Task Watchdog. Disable TWDT entirely — no-one here
+    // relies on its error-detection. (esp_task_wdt_delete on IDLE leaves the
+    // IDLE hook spamming "task not found", so we deinit the whole thing.)
+    esp_task_wdt_deinit();
 
     g_hal.init();
 
