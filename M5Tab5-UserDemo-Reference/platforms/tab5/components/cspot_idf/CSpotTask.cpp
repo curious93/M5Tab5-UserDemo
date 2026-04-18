@@ -264,18 +264,12 @@ void CSpotTask::runTask() {
 
     ESP_LOGI(TAG, "authenticated OK");
 
-    // Persist reusable credentials so next boot skips ZeroConf.
-    // Also log the JSON to serial so the host can back it up — if NVS is ever
-    // wiped (factory reset, erase-all flash), the host copy lets us recover
-    // without needing another iPhone tap.
+    // Persist reusable credentials so next boot skips ZeroConf
     try {
         blob->authData = token;
         blob->authType = 1;  // AUTHENTICATION_STORED_SPOTIFY_CREDENTIALS
-        std::string j = blob->toJson();
-        saveStoredBlob(j);
+        saveStoredBlob(blob->toJson());
         ESP_LOGI(TAG, "stored reusable credentials to NVS");
-        // Wrap in a unique marker so a log scraper can grab exactly this line
-        ESP_LOGI(TAG, "CSPOT_BLOB_BEGIN %s CSPOT_BLOB_END", j.c_str());
     } catch (...) {
         ESP_LOGW(TAG, "failed to persist credentials");
     }

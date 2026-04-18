@@ -13,10 +13,3 @@ boot_log.txt
 
 # Local Claude Code state (local permissions, scheduled task locks)
 .claude/
-
-# cspot host-embedded credential header (generated from ~/.claude/tab5/cspot_blob.json)
-generated_blob.h
-
-# Project-local secrets (cspot blob, etc.) — never committed. README is exception.
-.secrets/*
-!.secrets/README.md
