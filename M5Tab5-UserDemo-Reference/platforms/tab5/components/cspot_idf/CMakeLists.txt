@@ -2,9 +2,17 @@ cmake_minimum_required(VERSION 3.16)
 
 file(GLOB SOURCES "*.cpp")
 
+# Generate generated_blob.h from host-side .secrets/cspot_blob.json (or
+# ~/.claude/tab5/cspot_blob.json). Empty define if no backup exists —
+# cspot falls back to NVS, then ZeroConf.
+set(CSPOT_BLOB_HEADER "${CMAKE_CURRENT_BINARY_DIR}/generated_blob.h")
+execute_process(
+    COMMAND /usr/bin/python3 $ENV{HOME}/.claude/hooks/cspot_blob_gen_header.py "${CSPOT_BLOB_HEADER}"
+)
+
 idf_component_register(
     SRCS ${SOURCES}
-    INCLUDE_DIRS "."
+    INCLUDE_DIRS "." "${CMAKE_CURRENT_BINARY_DIR}"
     REQUIRES mbedtls espressif__mdns m5stack_tab5 nvs_flash esp_event esp_wifi esp_http_server
 )
 
