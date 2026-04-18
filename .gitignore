@@ -18,5 +18,5 @@ boot_log.txt
 generated_blob.h
 
 # Project-local secrets (cspot blob, etc.) — never committed. README is exception.
-.secrets/
+.secrets/*
 !.secrets/README.md
