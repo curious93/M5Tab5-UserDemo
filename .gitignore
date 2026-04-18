@@ -16,3 +16,7 @@ boot_log.txt
 
 # cspot host-embedded credential header (generated from ~/.claude/tab5/cspot_blob.json)
 generated_blob.h
+
+# Project-local secrets (cspot blob, etc.) — never committed. README is exception.
+.secrets/
+!.secrets/README.md
