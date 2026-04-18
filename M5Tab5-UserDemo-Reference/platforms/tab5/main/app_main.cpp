@@ -14,6 +14,11 @@ extern "C" void app_main(void)
     ESP_LOGI(TAG, "booting...");
     g_hal.init();
 
+    // Factory firmware starts SDIO/C6 init at ~7.5s uptime (after display +
+    // audio + launcher are all up). We need to give the C6 similar time to
+    // fully boot — otherwise SDIO init races the C6 ROM and fails.
+    vTaskDelay(pdMS_TO_TICKS(6000));
+
     ESP_LOGI(TAG, "starting WiFi STA...");
     g_hal.startWifiSta("Ingrid", "Loggo03!");
 
