@@ -2,19 +2,9 @@ cmake_minimum_required(VERSION 3.16)
 
 file(GLOB SOURCES "*.cpp")
 
-# Generate generated_blob.h from host-side cspot_blob.json (if present).
-# This lets us embed captured Spotify reusable credentials into the firmware so
-# factory-reset / NVS-wipe doesn't require a new iPhone tap. Header is
-# regenerated at every configure; the script is idempotent.
-set(CSPOT_BLOB_HEADER "${CMAKE_CURRENT_BINARY_DIR}/generated_blob.h")
-execute_process(
-    COMMAND /usr/bin/python3 $ENV{HOME}/.claude/hooks/cspot_blob_gen_header.py "${CSPOT_BLOB_HEADER}"
-    RESULT_VARIABLE _blob_rv
-)
-
 idf_component_register(
     SRCS ${SOURCES}
-    INCLUDE_DIRS "." "${CMAKE_CURRENT_BINARY_DIR}"
+    INCLUDE_DIRS "."
     REQUIRES mbedtls espressif__mdns m5stack_tab5 nvs_flash esp_event esp_wifi esp_http_server
 )
 

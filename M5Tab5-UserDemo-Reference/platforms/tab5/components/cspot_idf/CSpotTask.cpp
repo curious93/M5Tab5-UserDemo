@@ -18,9 +18,6 @@
 #include <nvs.h>
 #include <nlohmann/json.hpp>
 
-// Host-generated header (empty string if no host backup exists).
-#include "generated_blob.h"
-
 namespace {
 constexpr const char* NVS_NS  = "cspot";
 constexpr const char* NVS_KEY = "blob_json";
@@ -151,34 +148,19 @@ void CSpotTask::runTask() {
 
     std::atomic<bool> gotBlob{false};
 
-    // Try credentials in priority order:
-    // 1) host-embedded blob (survives NVS wipe / factory reset)
-    // 2) NVS-stored blob
-    // 3) ZeroConf (iPhone tap)
+    // Try stored credentials first (auto-login after one-time ZeroConf claim)
     std::string storedJson;
-    bool loaded = false;
-    const char* embedded = CSPOT_EMBEDDED_BLOB_JSON;
-    if (embedded && embedded[0] != '\0') {
-        try {
-            blob->loadJson(embedded);
-            loaded = true;
-            ESP_LOGI(TAG, "loaded embedded credentials for user '%s' (host backup)",
-                     blob->getUserName().c_str());
-        } catch (...) {
-            ESP_LOGW(TAG, "embedded credentials invalid, falling back to NVS");
-        }
-    }
-    if (!loaded && loadStoredBlob(storedJson)) {
+    if (loadStoredBlob(storedJson)) {
         try {
             blob->loadJson(storedJson);
-            loaded = true;
-            ESP_LOGI(TAG, "loaded NVS credentials for user '%s'", blob->getUserName().c_str());
+            gotBlob = true;
+            ESP_LOGI(TAG, "loaded stored credentials for user '%s', skipping ZeroConf",
+                     blob->getUserName().c_str());
         } catch (...) {
-            ESP_LOGW(TAG, "NVS credentials invalid, clearing");
+            ESP_LOGW(TAG, "stored credentials invalid, clearing");
             eraseStoredBlob();
         }
     }
-    if (loaded) gotBlob = true;
 
     auto server = std::make_unique<bell::BellHTTPServer>(8080);
 
