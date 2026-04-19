@@ -95,7 +95,7 @@ void Tab5AudioSink::feedPCMFrames(const uint8_t* buffer, size_t bytes) {
                                      &written, pdMS_TO_TICKS(200));
     s_total_written += written;
 
-    if ((++s_frames_called & 0xFF) == 0) {  // every 256 calls
+    if ((++s_frames_called & 0x1F) == 0) {  // every 32 calls (~350 ms @ 48kHz)
         ESP_LOGI(TAG, "feedPCMFrames: calls=%lu, err=0x%x, in=%u, out=%u, written=%u, total=%lu",
                  (unsigned long)s_frames_called, err, (unsigned)bytes,
                  (unsigned)(outFrames * 4), (unsigned)written,
