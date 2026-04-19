@@ -71,8 +71,11 @@ void HalEsp32::init()
     ESP_LOGI(_tag.c_str(), "codec init");
     delay(200);
     bsp_codec_init();
-    auto* codec = bsp_get_codec_handle();
-    if (codec && codec->set_mute) codec->set_mute(true);
+    // Factory muted the codec here to keep it quiet at boot. We don't — muting
+    // the ES8388 here seems to shut down the output stage in a way that later
+    // set_mute(false) doesn't reverse, so Tab5AudioSink writes succeed (DMA
+    // drains) but no audio reaches the speaker. Leaving the codec unmuted from
+    // the start lets cspot's first feedPCMFrames actually output sound.
 
     ESP_LOGI(_tag.c_str(), "imu init");
     imu_init();

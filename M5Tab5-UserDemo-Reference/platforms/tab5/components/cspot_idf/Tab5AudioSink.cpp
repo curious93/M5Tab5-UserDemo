@@ -97,6 +97,18 @@ void Tab5AudioSink::feedPCMFrames(const uint8_t* buffer, size_t bytes) {
     _prevL = in[(inFrames - 1) * 2];
     _prevR = in[(inFrames - 1) * 2 + 1];
 
+    // Test tone: override the first ~50 calls (~600ms @ 48kHz/2KB chunks)
+    // with a 1 kHz square wave. If we hear a beep, the DAC/amp path is alive
+    // and the problem is codec config / encoding; if we hear nothing, the
+    // output stage itself is dead.
+    if (s_frames_called < 50) {
+        for (size_t i = 0; i < outFrames; ++i) {
+            int16_t sample = ((i / 24) & 1) ? 12000 : -12000;  // ~1kHz @ 48kHz
+            outBuf[i * 2]     = sample;
+            outBuf[i * 2 + 1] = sample;
+        }
+    }
+
     size_t written = 0;
     // Factory uses portMAX_DELAY (hal_audio.cpp:71). bsp_i2s_write ignores
     // timeout anyway — esp_codec_dev_write blocks until DMA descriptor frees.
