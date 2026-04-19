@@ -13,6 +13,8 @@
 #include <esp_log.h>
 #include <esp_wifi.h>
 #include <esp_netif.h>
+#include <driver/i2s_types.h>
+#include <bsp/m5stack_tab5.h>
 #include <mdns.h>
 #include <nvs_flash.h>
 #include <nvs.h>
@@ -132,6 +134,36 @@ void CSpotPlayer::feedData(uint8_t* data, size_t len) {
 }
 
 void CSpotPlayer::runTask() {
+    // Diagnostic: 1.5 s 1 kHz beep at the start of the consumer task.
+    // Runs AFTER HAL + display + WiFi + cspot auth — exactly at the point
+    // where feedPCMFrames calls later succeed but produce no audio. If this
+    // beep is audible, the codec is still healthy at cspot runtime and the
+    // fault is the Vorbis PCM content reaching feedPCMFrames. If it is
+    // silent, something between HAL init and cspot runtime broke the codec.
+    {
+        auto* codec = bsp_get_codec_handle();
+        if (codec && codec->i2s_write && codec->set_volume && codec->set_mute &&
+            codec->i2s_reconfig_clk_fn) {
+            ESP_LOGI(TAG, "cspot runtime self-test: 1 kHz beep via ES8388");
+            codec->set_volume(80);
+            codec->set_mute(false);
+            codec->i2s_reconfig_clk_fn(48000, 16, I2S_SLOT_MODE_STEREO);
+            static int16_t tone[1000];  // 500 stereo frames ≈ 10 ms
+            for (int i = 0; i < 500; ++i) {
+                int16_t s = ((i / 24) & 1) ? 12000 : -12000;
+                tone[i * 2] = s;
+                tone[i * 2 + 1] = s;
+            }
+            size_t total = 0;
+            for (int n = 0; n < 150; ++n) {
+                size_t w = 0;
+                codec->i2s_write(tone, sizeof(tone), &w, portMAX_DELAY);
+                total += w;
+            }
+            ESP_LOGI(TAG, "cspot runtime self-test: wrote=%u bytes", (unsigned)total);
+        }
+    }
+
     std::vector<uint8_t> chunk(2048);
     while (true) {
         if (!_paused) {
