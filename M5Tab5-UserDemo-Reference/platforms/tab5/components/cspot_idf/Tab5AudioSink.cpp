@@ -35,7 +35,7 @@ bool Tab5AudioSink::setParams(uint32_t sampleRate, uint8_t channelCount, uint8_t
         ESP_LOGE(TAG, "i2s_reconfig_clk_fn failed: %s", esp_err_to_name(ret));
         return false;
     }
-    ESP_LOGI(TAG, "audio params: %lu Hz, %u ch, %u bit (vol=80, unmuted)",
+    ESP_LOGI(TAG, "audio params: %lu Hz, %u ch, %u bit (vol=30, unmuted)",
              (unsigned long)sampleRate, channelCount, bitDepth);
     return true;
 }
