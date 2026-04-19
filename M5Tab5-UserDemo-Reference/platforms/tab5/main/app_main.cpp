@@ -14,6 +14,15 @@ extern "C" void app_main(void)
 {
     ESP_LOGI(TAG, "booting...");
 
+    // DIAG: verbose logs for the HTTP/TLS stack so we can see why
+    // esp_http_client_read returns -1 after a 206 response is received.
+    esp_log_level_set("HTTP_CLIENT", ESP_LOG_VERBOSE);
+    esp_log_level_set("esp-tls", ESP_LOG_VERBOSE);
+    esp_log_level_set("esp-tls-mbedtls", ESP_LOG_VERBOSE);
+    esp_log_level_set("mbedtls", ESP_LOG_VERBOSE);
+    esp_log_level_set("transport_base", ESP_LOG_VERBOSE);
+    esp_log_level_set("transport_ssl", ESP_LOG_VERBOSE);
+
     // cspot_player blocks CPU1 in I2S writes long enough to starve IDLE1,
     // which trips the Task Watchdog. Disable TWDT entirely — no-one here
     // relies on its error-detection. (esp_task_wdt_delete on IDLE leaves the
