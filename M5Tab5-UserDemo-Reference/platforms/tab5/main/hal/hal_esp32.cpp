@@ -71,11 +71,33 @@ void HalEsp32::init()
     ESP_LOGI(_tag.c_str(), "codec init");
     delay(200);
     bsp_codec_init();
-    // Factory muted the codec here to keep it quiet at boot. We don't — muting
-    // the ES8388 here seems to shut down the output stage in a way that later
-    // set_mute(false) doesn't reverse, so Tab5AudioSink writes succeed (DMA
-    // drains) but no audio reaches the speaker. Leaving the codec unmuted from
-    // the start lets cspot's first feedPCMFrames actually output sound.
+
+    // Boot-time audio self-test: 1.5 s of 1 kHz square wave @ 48 kHz stereo.
+    // Proves ES8388 + PI4IO SPK_EN + amp path works before cspot runs.
+    // Tone is generated in a 4 KB buffer (500 stereo frames) and looped.
+    {
+        auto* codec = bsp_get_codec_handle();
+        if (codec && codec->i2s_write && codec->set_volume &&
+            codec->set_mute && codec->i2s_reconfig_clk_fn) {
+            ESP_LOGI(_tag.c_str(), "audio self-test: 1 kHz beep via ES8388");
+            codec->set_volume(80);
+            codec->set_mute(false);
+            codec->i2s_reconfig_clk_fn(48000, 16, I2S_SLOT_MODE_STEREO);
+            int16_t chunk[1000];  // 500 stereo frames = ~10 ms @ 48 kHz
+            for (int i = 0; i < 500; ++i) {
+                int16_t s = ((i / 24) & 1) ? 12000 : -12000;  // ~1 kHz
+                chunk[i * 2]     = s;
+                chunk[i * 2 + 1] = s;
+            }
+            size_t total = 0;
+            for (int n = 0; n < 150; ++n) {  // 150 × 10 ms = 1.5 s
+                size_t w = 0;
+                codec->i2s_write(chunk, sizeof(chunk), &w, portMAX_DELAY);
+                total += w;
+            }
+            ESP_LOGI(_tag.c_str(), "audio self-test: wrote=%u bytes", (unsigned)total);
+        }
+    }
 
     ESP_LOGI(_tag.c_str(), "imu init");
     imu_init();
