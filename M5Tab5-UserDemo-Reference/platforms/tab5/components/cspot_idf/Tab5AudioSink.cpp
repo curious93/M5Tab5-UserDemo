@@ -90,6 +90,25 @@ void Tab5AudioSink::feedPCMFrames(const uint8_t* buffer, size_t bytes) {
     _prevL = in[(inFrames - 1) * 2];
     _prevR = in[(inFrames - 1) * 2 + 1];
 
+    // Diag: on every 32nd call, compute peak + RMS of the PCM we're about to
+    // send. If audio is reaching DAC but you hear nothing, samples are silent
+    // (peak near 0) — content issue. If peak is large but output is silent,
+    // codec state broke between HAL init and this call.
+    if ((s_frames_called & 0x1F) == 0) {
+        int32_t peak = 0;
+        int64_t sumSq = 0;
+        for (size_t i = 0; i < outFrames * 2; ++i) {
+            int32_t v = outBuf[i];
+            if (v < 0) v = -v;
+            if (v > peak) peak = v;
+            sumSq += (int64_t)outBuf[i] * outBuf[i];
+        }
+        uint32_t rms = outFrames ? (uint32_t)__builtin_sqrt(sumSq / (outFrames * 2)) : 0;
+        ESP_LOGI(TAG, "PCM peek: peak=%ld rms=%lu first=[%d,%d,%d,%d]",
+                 (long)peak, (unsigned long)rms,
+                 outBuf[0], outBuf[1], outBuf[2], outBuf[3]);
+    }
+
     size_t written = 0;
     esp_err_t err = codec->i2s_write((void*)outBuf, outFrames * 4,
                                      &written, portMAX_DELAY);
