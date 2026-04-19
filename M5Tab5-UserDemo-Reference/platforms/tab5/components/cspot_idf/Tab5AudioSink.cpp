@@ -24,15 +24,19 @@ bool Tab5AudioSink::setParams(uint32_t sampleRate, uint8_t channelCount, uint8_t
 
     i2s_slot_mode_t slotMode = (channelCount == 1) ? I2S_SLOT_MODE_MONO : I2S_SLOT_MODE_STEREO;
 
-    // Factory order (hal_audio.cpp): mute → reconfig → unmute.
-    if (codec->set_mute) codec->set_mute(true);
+    // Match the exact sequence of the boot-time self-test beep (hal_esp32.cpp)
+    // that produces loud audible output. The previous mute(true) → reconfig →
+    // mute(false) dance silenced the DAC output stage permanently in our
+    // tests: writes returned err=0x0 + all bytes "written" but no sound.
+    if (codec->set_volume) codec->set_volume(80);
+    if (codec->set_mute)   codec->set_mute(false);
     esp_err_t ret = codec->i2s_reconfig_clk_fn(sampleRate, bitDepth, slotMode);
     if (ret != ESP_OK) {
         ESP_LOGE(TAG, "i2s_reconfig_clk_fn failed: %s", esp_err_to_name(ret));
         return false;
     }
-    if (codec->set_mute) codec->set_mute(false);
-    ESP_LOGI(TAG, "audio params: %lu Hz, %u ch, %u bit", (unsigned long)sampleRate, channelCount, bitDepth);
+    ESP_LOGI(TAG, "audio params: %lu Hz, %u ch, %u bit (vol=80, unmuted)",
+             (unsigned long)sampleRate, channelCount, bitDepth);
     return true;
 }
 
