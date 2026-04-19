@@ -24,12 +24,14 @@ bool Tab5AudioSink::setParams(uint32_t sampleRate, uint8_t channelCount, uint8_t
     }
 
     i2s_slot_mode_t slotMode = (channelCount == 1) ? I2S_SLOT_MODE_MONO : I2S_SLOT_MODE_STEREO;
+
+    // Factory order (hal_audio.cpp): mute → reconfig → unmute.
+    if (codec->set_mute) codec->set_mute(true);
     esp_err_t ret = codec->i2s_reconfig_clk_fn(sampleRate, bitDepth, slotMode);
     if (ret != ESP_OK) {
         ESP_LOGE(TAG, "i2s_reconfig_clk_fn failed: %s", esp_err_to_name(ret));
         return false;
     }
-
     if (codec->set_mute) codec->set_mute(false);
     ESP_LOGI(TAG, "audio params: %lu Hz, %u ch, %u bit", (unsigned long)sampleRate, channelCount, bitDepth);
     return true;
@@ -89,13 +91,22 @@ void Tab5AudioSink::feedPCMFrames(const uint8_t* buffer, size_t bytes) {
     _prevR = in[(inFrames - 1) * 2 + 1];
 
     size_t written = 0;
-    // 200 ms timeout instead of portMAX_DELAY — avoid unbounded hang if I2S
-    // channel is misconfigured; errors surface in the periodic log.
+    // Factory uses portMAX_DELAY (hal_audio.cpp:71). bsp_i2s_write ignores
+    // timeout anyway — esp_codec_dev_write blocks until DMA descriptor frees.
+    uint32_t t_start = xTaskGetTickCount();
     esp_err_t err = codec->i2s_write((void*)outBuf.data(), outFrames * 4,
-                                     &written, pdMS_TO_TICKS(200));
+                                     &written, portMAX_DELAY);
+    uint32_t t_elapsed = xTaskGetTickCount() - t_start;
     s_total_written += written;
 
-    if ((++s_frames_called & 0x1F) == 0) {  // every 32 calls (~350 ms @ 48kHz)
+    // First 8 calls: log every one to diagnose DMA drain.
+    if (s_frames_called < 8) {
+        ESP_LOGI(TAG, "feedPCMFrames[%lu]: err=0x%x, in=%u, out=%u, written=%u, took=%lums",
+                 (unsigned long)s_frames_called, err, (unsigned)bytes,
+                 (unsigned)(outFrames * 4), (unsigned)written,
+                 (unsigned long)(t_elapsed * portTICK_PERIOD_MS));
+    }
+    if ((++s_frames_called & 0x1F) == 0) {  // every 32 calls
         ESP_LOGI(TAG, "feedPCMFrames: calls=%lu, err=0x%x, in=%u, out=%u, written=%u, total=%lu",
                  (unsigned long)s_frames_called, err, (unsigned)bytes,
                  (unsigned)(outFrames * 4), (unsigned)written,

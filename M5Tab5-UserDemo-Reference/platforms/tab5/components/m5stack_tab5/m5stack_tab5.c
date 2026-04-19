@@ -727,14 +727,14 @@ static int volume;
     }
 
 /* This configuration is used by default in `bsp_extra_audio_init()`.
- * Changed MONO → STEREO: cspot feeds 16-bit stereo PCM (44.1 kHz upsampled
- * to 48 kHz). A mono slot config silently discards one channel and stalls
- * i2s_write waiting on a DMA queue that never drains with correct bit rate. */
-#define BSP_I2S_DUPLEX_MONO_CFG(_sample_rate)                                                           \
-    {                                                                                                   \
-        .clk_cfg  = I2S_STD_CLK_DEFAULT_CONFIG(_sample_rate),                                           \
-        .slot_cfg = I2S_STD_PHILIP_SLOT_DEFAULT_CONFIG(I2S_DATA_BIT_WIDTH_16BIT, I2S_SLOT_MODE_STEREO), \
-        .gpio_cfg = BSP_I2S_GPIO_CFG,                                                                   \
+ * Factory init uses MONO here, then `codec->i2s_reconfig_clk_fn(sr,bits,mode)`
+ * switches slot/channel mode at runtime (see hal_audio.cpp). Keep MONO; the
+ * Tab5AudioSink reconfigures to stereo before each playback. */
+#define BSP_I2S_DUPLEX_MONO_CFG(_sample_rate)                                                         \
+    {                                                                                                 \
+        .clk_cfg  = I2S_STD_CLK_DEFAULT_CONFIG(_sample_rate),                                         \
+        .slot_cfg = I2S_STD_PHILIP_SLOT_DEFAULT_CONFIG(I2S_DATA_BIT_WIDTH_16BIT, I2S_SLOT_MODE_MONO), \
+        .gpio_cfg = BSP_I2S_GPIO_CFG,                                                                 \
     }
 
 esp_err_t bsp_audio_init(const i2s_std_config_t* i2s_config)
