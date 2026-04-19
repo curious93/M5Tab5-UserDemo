@@ -92,13 +92,27 @@ CSpotPlayer::CSpotPlayer(std::shared_ptr<cspot::SpircHandler> handler)
     _handler->setEventHandler(
         [this](std::unique_ptr<cspot::SpircHandler::Event> ev) {
             switch (ev->eventType) {
-                case cspot::SpircHandler::EventType::PLAY_PAUSE:
-                    _paused = std::get<bool>(ev->data);
+                case cspot::SpircHandler::EventType::PLAY_PAUSE: {
+                    bool paused = std::get<bool>(ev->data);
+                    ESP_LOGI(TAG, "event PLAY_PAUSE paused=%d", paused ? 1 : 0);
+                    _paused = paused;
                     break;
+                }
                 case cspot::SpircHandler::EventType::FLUSH:
                 case cspot::SpircHandler::EventType::SEEK:
-                case cspot::SpircHandler::EventType::PLAYBACK_START:
+                    ESP_LOGI(TAG, "event FLUSH/SEEK — emptyBuffer");
                     _buf->emptyBuffer();
+                    break;
+                case cspot::SpircHandler::EventType::PLAYBACK_START:
+                    // Do NOT emptyBuffer here: PLAYBACK_START fires at the
+                    // start of every new track via trackLoadedCallback, which
+                    // happens *after* the previous track's Vorbis decode has
+                    // finished and its remaining PCM (~up to 512 KB, ~2.7 s at
+                    // 48 kHz stereo) is still sitting in the circular buffer
+                    // waiting to be drained to the DAC. Flushing here throws
+                    // that tail away, so each track becomes audible for only
+                    // the ~350 ms that reached the DMA before EOF.
+                    ESP_LOGI(TAG, "event PLAYBACK_START — keep buffer");
                     break;
                 default:
                     break;
