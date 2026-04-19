@@ -4,7 +4,6 @@
 #include <driver/i2s_types.h>
 #include <freertos/FreeRTOS.h>
 #include <freertos/task.h>
-#include <vector>
 
 static const char* TAG = "Tab5Sink";
 
@@ -63,9 +62,11 @@ void Tab5AudioSink::feedPCMFrames(const uint8_t* buffer, size_t bytes) {
 
     // Virtual input of length inFrames+1: [prev, in[0], ..., in[inFrames-1]].
     // Output count bounded by inFrames * 48000/44100 + margin.
-    static std::vector<int16_t> outBuf;
+    // Fixed-size buffer — no heap alloc on hot path. 2 KiB input (CSpotPlayer's
+    // chunk size) resamples to ~2.24 KiB stereo output; 8 KiB margin is plenty.
+    static int16_t outBuf[4096];  // 8 KiB, up to 2048 stereo frames
     const size_t maxOut = inFrames * 48000 / 44100 + 4;
-    if (outBuf.size() < maxOut * 2) outBuf.resize(maxOut * 2);
+    if (maxOut * 2 > sizeof(outBuf) / sizeof(outBuf[0])) return;  // input too large
 
     uint32_t phase = _phase;
     int16_t prevL = _prevL, prevR = _prevR;
@@ -94,7 +95,7 @@ void Tab5AudioSink::feedPCMFrames(const uint8_t* buffer, size_t bytes) {
     // Factory uses portMAX_DELAY (hal_audio.cpp:71). bsp_i2s_write ignores
     // timeout anyway — esp_codec_dev_write blocks until DMA descriptor frees.
     uint32_t t_start = xTaskGetTickCount();
-    esp_err_t err = codec->i2s_write((void*)outBuf.data(), outFrames * 4,
+    esp_err_t err = codec->i2s_write((void*)outBuf, outFrames * 4,
                                      &written, portMAX_DELAY);
     uint32_t t_elapsed = xTaskGetTickCount() - t_start;
     s_total_written += written;
