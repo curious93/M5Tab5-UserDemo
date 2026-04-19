@@ -83,7 +83,7 @@ void HalEsp32::init()
             codec->set_volume(80);
             codec->set_mute(false);
             codec->i2s_reconfig_clk_fn(48000, 16, I2S_SLOT_MODE_STEREO);
-            int16_t chunk[1000];  // 500 stereo frames = ~10 ms @ 48 kHz
+            static int16_t chunk[1000];  // 500 stereo frames = ~10 ms (heap, not stack)
             for (int i = 0; i < 500; ++i) {
                 int16_t s = ((i / 24) & 1) ? 12000 : -12000;  // ~1 kHz
                 chunk[i * 2]     = s;
