@@ -62,7 +62,8 @@ long tell_cb(void* user) {
 
 }  // namespace
 
-extern "C" void tremor_selftest_run() {
+// Inner body, runs from a dedicated 32 KB-stack task.
+static void selftest_body() {
     const size_t bytes = test_tone_ogg_end - test_tone_ogg_start;
     ESP_LOGI(TAG, "embedded test_tone.ogg: %u bytes", (unsigned)bytes);
 
@@ -121,4 +122,22 @@ extern "C" void tremor_selftest_run() {
     } else {
         ESP_LOGE(TAG, "VERDICT: Tremor itself outputs silence — decoder build problem");
     }
+}
+
+static TaskHandle_t s_selftest_task = nullptr;
+static volatile bool s_selftest_done = false;
+
+static void selftest_task(void*) {
+    selftest_body();
+    s_selftest_done = true;
+    vTaskDelete(nullptr);
+}
+
+extern "C" void tremor_selftest_run() {
+    // Run on a dedicated 32 KB-stack task (Tremor's ov_open_callbacks uses
+    // a deep call stack; the default app_main ~3.5 KB stack overflows).
+    s_selftest_done = false;
+    xTaskCreate(selftest_task, "tremor_selftest", 32 * 1024, nullptr, 5,
+                &s_selftest_task);
+    while (!s_selftest_done) vTaskDelay(pdMS_TO_TICKS(100));
 }
