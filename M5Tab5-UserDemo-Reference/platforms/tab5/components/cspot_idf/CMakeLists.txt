@@ -13,7 +13,7 @@ execute_process(
 idf_component_register(
     SRCS ${SOURCES}
     INCLUDE_DIRS "." "${CMAKE_CURRENT_BINARY_DIR}"
-    REQUIRES mbedtls espressif__mdns m5stack_tab5 nvs_flash esp_event esp_wifi esp_http_server esp_http_client
+    REQUIRES mbedtls espressif__mdns m5stack_tab5 nvs_flash esp_event esp_wifi esp_http_server esp_http_client esp-tls
     EMBED_FILES test_tone.ogg
 )
 
@@ -42,7 +42,13 @@ idf_component_get_property(HTTP_CLIENT_DIR esp_http_client COMPONENT_DIR)
 target_include_directories(cspot PRIVATE
     "${HTTP_CLIENT_DIR}/include"
     "${HTTP_CLIENT_DIR}")
-target_link_libraries(cspot PRIVATE idf::esp_http_client)
+target_link_libraries(cspot PRIVATE idf::esp_http_client idf::esp-tls)
+
+# esp_crt_bundle_attach needs the include + the CA data object
+idf_component_get_property(ESP_TLS_DIR esp-tls COMPONENT_DIR)
+target_include_directories(cspot PRIVATE
+    "${ESP_TLS_DIR}"
+    "${ESP_TLS_DIR}/esp_crt_bundle")
 
 # bell and cspot are non-IDF cmake targets — must explicitly enable exceptions
 # (IDF disables exceptions globally; add_subdirectory targets don't inherit that)
