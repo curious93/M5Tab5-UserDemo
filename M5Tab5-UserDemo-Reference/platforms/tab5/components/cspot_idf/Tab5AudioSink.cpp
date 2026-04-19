@@ -51,6 +51,12 @@ void Tab5AudioSink::feedPCMFrames(const uint8_t* buffer, size_t bytes) {
     if (s_frames_called == 0) {
         ESP_LOGI(TAG, "feedPCMFrames: FIRST CALL, bytes=%u (entering resample+write path)",
                  (unsigned)bytes);
+        // Force unmute + full volume on first real feed. hal_esp32.cpp:75 calls
+        // set_mute(true) right after bsp_codec_init and nothing unmutes until
+        // our setParams — which may run before the codec is fully enabled.
+        if (codec->set_mute)   codec->set_mute(false);
+        if (codec->set_volume) codec->set_volume(80);  // 80% — clearly audible
+        ESP_LOGI(TAG, "forced unmute + vol=80 before first i2s_write");
     }
 
     // Resample 44.1 kHz → 48 kHz (Q16 phase, linear interpolation).
