@@ -17,4 +17,9 @@ private:
     uint32_t _sampleRate = 44100;
     uint8_t  _bitDepth   = 16;
     uint8_t  _channels   = 2;
+
+    // 44.1 → 48 kHz linear-interp upsampler state (Q16 phase)
+    uint32_t _phase  = 0;
+    int16_t  _prevL  = 0;
+    int16_t  _prevR  = 0;
 };

@@ -72,7 +72,11 @@ CSpotPlayer::CSpotPlayer(std::shared_ptr<cspot::SpircHandler> handler)
     , _handler(handler)
 {
     _sink = std::make_unique<Tab5AudioSink>();
-    _sink->setParams(44100, 2, 16);
+    // Tab5's I2S out channel is bound to the mic channel at 48 kHz (TDM pair).
+    // Reconfiguring to 44.1 kHz fails with "Mode 1 conflict", leaving i2s_write
+    // to block forever on portMAX_DELAY. Run the DAC at 48 kHz and upsample
+    // Spotify's 44.1 kHz Vorbis output in feedPCMFrames (160/147).
+    _sink->setParams(48000, 2, 16);
     _sink->volumeChanged(32768);   // 50% initial volume
 
     // 512 KB circular buffer — fits ~3 s at 44100/16/stereo
