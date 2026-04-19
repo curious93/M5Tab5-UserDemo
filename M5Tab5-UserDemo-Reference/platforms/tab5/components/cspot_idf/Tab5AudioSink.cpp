@@ -48,17 +48,6 @@ void Tab5AudioSink::feedPCMFrames(const uint8_t* buffer, size_t bytes) {
         return;
     }
 
-    if (s_frames_called == 0) {
-        ESP_LOGI(TAG, "feedPCMFrames: FIRST CALL, bytes=%u (entering resample+write path)",
-                 (unsigned)bytes);
-        // Force unmute + full volume on first real feed. hal_esp32.cpp:75 calls
-        // set_mute(true) right after bsp_codec_init and nothing unmutes until
-        // our setParams — which may run before the codec is fully enabled.
-        if (codec->set_mute)   codec->set_mute(false);
-        if (codec->set_volume) codec->set_volume(80);  // 80% — clearly audible
-        ESP_LOGI(TAG, "forced unmute + vol=80 before first i2s_write");
-    }
-
     // Resample 44.1 kHz → 48 kHz (Q16 phase, linear interpolation).
     // Step per output sample = 44100/48000 in input-index units = 60218 (Q16).
     static constexpr uint32_t kStep = (uint32_t)((44100ULL << 16) / 48000ULL);
@@ -97,35 +86,12 @@ void Tab5AudioSink::feedPCMFrames(const uint8_t* buffer, size_t bytes) {
     _prevL = in[(inFrames - 1) * 2];
     _prevR = in[(inFrames - 1) * 2 + 1];
 
-    // Test tone: override the first ~50 calls (~600ms @ 48kHz/2KB chunks)
-    // with a 1 kHz square wave. If we hear a beep, the DAC/amp path is alive
-    // and the problem is codec config / encoding; if we hear nothing, the
-    // output stage itself is dead.
-    if (s_frames_called < 50) {
-        for (size_t i = 0; i < outFrames; ++i) {
-            int16_t sample = ((i / 24) & 1) ? 12000 : -12000;  // ~1kHz @ 48kHz
-            outBuf[i * 2]     = sample;
-            outBuf[i * 2 + 1] = sample;
-        }
-    }
-
     size_t written = 0;
-    // Factory uses portMAX_DELAY (hal_audio.cpp:71). bsp_i2s_write ignores
-    // timeout anyway — esp_codec_dev_write blocks until DMA descriptor frees.
-    uint32_t t_start = xTaskGetTickCount();
     esp_err_t err = codec->i2s_write((void*)outBuf, outFrames * 4,
                                      &written, portMAX_DELAY);
-    uint32_t t_elapsed = xTaskGetTickCount() - t_start;
     s_total_written += written;
 
-    // First 8 calls: log every one to diagnose DMA drain.
-    if (s_frames_called < 8) {
-        ESP_LOGI(TAG, "feedPCMFrames[%lu]: err=0x%x, in=%u, out=%u, written=%u, took=%lums",
-                 (unsigned long)s_frames_called, err, (unsigned)bytes,
-                 (unsigned)(outFrames * 4), (unsigned)written,
-                 (unsigned long)(t_elapsed * portTICK_PERIOD_MS));
-    }
-    if ((++s_frames_called & 0x1F) == 0) {  // every 32 calls
+    if ((++s_frames_called & 0x1F) == 0) {  // every 32 calls (~350 ms @ 48 kHz)
         ESP_LOGI(TAG, "feedPCMFrames: calls=%lu, err=0x%x, in=%u, out=%u, written=%u, total=%lu",
                  (unsigned long)s_frames_called, err, (unsigned)bytes,
                  (unsigned)(outFrames * 4), (unsigned)written,
