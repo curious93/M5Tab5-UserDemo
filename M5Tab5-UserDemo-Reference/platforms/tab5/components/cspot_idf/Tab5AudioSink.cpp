@@ -90,7 +90,7 @@ void Tab5AudioSink::feedPCMFrames(const uint8_t* buffer, size_t bytes) {
     _prevL = in[(inFrames - 1) * 2];
     _prevR = in[(inFrames - 1) * 2 + 1];
 
-    if ((s_frames_called & 0x1F) == 0) {
+    if (s_frames_called < 64 || (s_frames_called & 0x1F) == 0) {
         // input peak (from Vorbis decoder output, pre-resample)
         int32_t inPeak = 0;
         int64_t inSumSq = 0;
