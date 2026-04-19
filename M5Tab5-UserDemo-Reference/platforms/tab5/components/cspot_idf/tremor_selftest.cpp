@@ -78,7 +78,7 @@ static void selftest_body() {
 
     Tab5AudioSink sink;
     sink.setParams(48000, 2, 16);
-    sink.volumeChanged(52429);  // ~80%
+    sink.volumeChanged(16384);  // ~25% — keeps the test audible but quiet
 
     std::vector<uint8_t> pcm(1024);
     int section = 0;

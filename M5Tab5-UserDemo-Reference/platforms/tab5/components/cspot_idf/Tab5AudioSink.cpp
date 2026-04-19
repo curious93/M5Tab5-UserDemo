@@ -28,7 +28,7 @@ bool Tab5AudioSink::setParams(uint32_t sampleRate, uint8_t channelCount, uint8_t
     // that produces loud audible output. The previous mute(true) → reconfig →
     // mute(false) dance silenced the DAC output stage permanently in our
     // tests: writes returned err=0x0 + all bytes "written" but no sound.
-    if (codec->set_volume) codec->set_volume(80);
+    if (codec->set_volume) codec->set_volume(30);
     if (codec->set_mute)   codec->set_mute(false);
     esp_err_t ret = codec->i2s_reconfig_clk_fn(sampleRate, bitDepth, slotMode);
     if (ret != ESP_OK) {

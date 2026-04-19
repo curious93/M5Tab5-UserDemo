@@ -145,12 +145,12 @@ void CSpotPlayer::runTask() {
         if (codec && codec->i2s_write && codec->set_volume && codec->set_mute &&
             codec->i2s_reconfig_clk_fn) {
             ESP_LOGI(TAG, "cspot runtime self-test: 1 kHz beep via ES8388");
-            codec->set_volume(80);
+            codec->set_volume(30);
             codec->set_mute(false);
             codec->i2s_reconfig_clk_fn(48000, 16, I2S_SLOT_MODE_STEREO);
             static int16_t tone[1000];  // 500 stereo frames ≈ 10 ms
             for (int i = 0; i < 500; ++i) {
-                int16_t s = ((i / 24) & 1) ? 12000 : -12000;
+                int16_t s = ((i / 24) & 1) ? 3000 : -3000;
                 tone[i * 2] = s;
                 tone[i * 2 + 1] = s;
             }
