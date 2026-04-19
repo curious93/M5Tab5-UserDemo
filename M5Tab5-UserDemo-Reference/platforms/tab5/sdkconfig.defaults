@@ -90,3 +90,12 @@ CONFIG_CODEC_I2C_BACKWARD_COMPATIBLE=n
 # net_connect returns -66 (SOCKET_FAILED) after the first few tracks, every
 # subsequent .read() returns 0 bytes → Vorbis decodes silence. Bump the pool.
 CONFIG_LWIP_MAX_SOCKETS=16
+
+# ESP32-P4 / cspot CDN streaming: default CONFIG_LWIP_TCP_WND_DEFAULT=5760
+# (5.7 KB) is too small for Spotify CDN at 256 KB Range bodies — the server
+# fills the window, waits for ACK, and TLS read layers above return
+# WANT_READ before full records arrive. Bump to 64 KB. Also enable SO_RCVBUF
+# so apps can tune receive buffers.
+CONFIG_LWIP_TCP_WND_DEFAULT=65535
+CONFIG_LWIP_TCP_SND_BUF_DEFAULT=65535
+CONFIG_LWIP_SO_RCVBUF=y
