@@ -14,6 +14,7 @@ idf_component_register(
     SRCS ${SOURCES}
     INCLUDE_DIRS "." "${CMAKE_CURRENT_BINARY_DIR}"
     REQUIRES mbedtls espressif__mdns m5stack_tab5 nvs_flash esp_event esp_wifi esp_http_server
+    EMBED_FILES test_tone.ogg
 )
 
 # Bell options — set BEFORE add_subdirectory so they propagate
