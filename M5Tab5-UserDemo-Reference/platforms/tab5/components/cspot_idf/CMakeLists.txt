@@ -13,7 +13,7 @@ execute_process(
 idf_component_register(
     SRCS ${SOURCES}
     INCLUDE_DIRS "." "${CMAKE_CURRENT_BINARY_DIR}"
-    REQUIRES mbedtls espressif__mdns m5stack_tab5 nvs_flash esp_event esp_wifi esp_http_server
+    REQUIRES mbedtls espressif__mdns m5stack_tab5 nvs_flash esp_event esp_wifi esp_http_server esp_http_client
     EMBED_FILES test_tone.ogg
 )
 
@@ -33,6 +33,16 @@ add_subdirectory(
 )
 
 target_link_libraries(${COMPONENT_LIB} PUBLIC cspot)
+
+# cspot's CDNAudioFile now uses esp_http_client (IDF-native HTTP) for CDN
+# range fetches. The cspot target is non-IDF, so plumb in the include path
+# + link the library manually.
+idf_component_get_property(HTTP_CLIENT_INCLUDES esp_http_client INCLUDE_DIRS)
+idf_component_get_property(HTTP_CLIENT_DIR esp_http_client COMPONENT_DIR)
+target_include_directories(cspot PRIVATE
+    "${HTTP_CLIENT_DIR}/include"
+    "${HTTP_CLIENT_DIR}")
+target_link_libraries(cspot PRIVATE idf::esp_http_client)
 
 # bell and cspot are non-IDF cmake targets — must explicitly enable exceptions
 # (IDF disables exceptions globally; add_subdirectory targets don't inherit that)
