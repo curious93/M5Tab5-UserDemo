@@ -84,3 +84,9 @@ CONFIG_MBEDTLS_SSL_OUT_CONTENT_LEN=4096
 # Enable C++ exceptions (required by cspot)
 CONFIG_COMPILER_CXX_EXCEPTIONS=y
 CONFIG_CODEC_I2C_BACKWARD_COMPATIBLE=n
+
+# cspot opens a FRESH HTTPS connection per CDN range-request (~7 per 1.6 MB
+# track). Default CONFIG_LWIP_MAX_SOCKETS=10 leaks TIME_WAIT slots on P4;
+# net_connect returns -66 (SOCKET_FAILED) after the first few tracks, every
+# subsequent .read() returns 0 bytes → Vorbis decodes silence. Bump the pool.
+CONFIG_LWIP_MAX_SOCKETS=16
