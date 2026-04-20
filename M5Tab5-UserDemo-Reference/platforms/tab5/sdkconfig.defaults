@@ -102,11 +102,9 @@ CONFIG_LWIP_TCP_WND_DEFAULT=65535
 CONFIG_LWIP_TCP_SND_BUF_DEFAULT=65535
 CONFIG_LWIP_SO_RCVBUF=y
 
-# DMA-heap relief for SDIO RX. Default STATIC_RX=10 × 1.6 KB = ~16 KB locked
-# in internal DMA-capable RAM; reducing to 6 frees ~6 KB which buys us
-# another HTTP range TLS handshake before sdio_rx_get_buffer asserts.
-CONFIG_ESP_WIFI_STATIC_RX_BUFFER_NUM=6
-
 # Push WiFi + LWIP dynamic allocations to PSRAM so internal DMA-capable
-# heap stays free for SDIO HW buffers.
+# heap stays free for SDIO HW buffers. Note: enabling this raises
+# ESP_WIFI_STATIC_RX_BUFFER_NUM's default from 10 → 16 (kconfig safety
+# margin to compensate for slower PSRAM access). Attempting to override
+# static-RX back to 6 here is a no-op — kconfig enforces the new default.
 CONFIG_SPIRAM_TRY_ALLOCATE_WIFI_LWIP=y
