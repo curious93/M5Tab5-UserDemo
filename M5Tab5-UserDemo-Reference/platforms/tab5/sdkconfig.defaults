@@ -102,12 +102,7 @@ CONFIG_LWIP_TCP_WND_DEFAULT=16384
 CONFIG_LWIP_TCP_SND_BUF_DEFAULT=16384
 CONFIG_LWIP_SO_RCVBUF=y
 
-# Move WiFi + lwIP pbuf allocations to PSRAM — prevents SDIO DMA-capable
-# internal SRAM exhaustion during sustained CDN streaming (assert failed:
-# sdio_rx_get_buffer sdio_drv.c:670 crash after ~200 s of playback).
+# Move WiFi + lwIP pbuf allocations to PSRAM — reduces internal SRAM pressure
+# during CDN streaming. The real crash fix is PSRAM prefetch in CDNAudioFile.cpp
+# which eliminates SDIO traffic during decode entirely.
 CONFIG_SPIRAM_TRY_ALLOCATE_WIFI_LWIP=y
-
-# Disable SDIO RX streaming mode — it queues too many DMA-capable SRAM buffers.
-# RX_NONE gives the same throughput on ESP32-P4 without the memory blowup.
-CONFIG_ESP_HOSTED_SDIO_OPTIMIZATION_RX_NONE=y
-CONFIG_ESP_HOSTED_SDIO_RX_Q_SIZE=8
