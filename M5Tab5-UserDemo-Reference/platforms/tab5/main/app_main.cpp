@@ -42,13 +42,8 @@ extern "C" void app_main(void)
     // Give WiFi time to connect before cspot needs the network
     vTaskDelay(pdMS_TO_TICKS(5000));
 
-    // Tremor standalone self-test BEFORE cspot starts. Decodes an embedded
-    // OGG and plays it through Tab5AudioSink. If we hear the sine, Tremor
-    // works — the silent-cspot bug is in CDNAudioFile (decrypt / chunk
-    // boundary). If we hear silence, Tremor itself is broken on P4.
-    ESP_LOGI(TAG, "running tremor selftest...");
-    tremor_selftest_run();
-
+    // Tremor selftest removed — Vorbis internal state never fully releases
+    // and steals DMA-capable heap that cspot's SDIO RX buffers need later.
     ESP_LOGI(TAG, "starting cspot...");
     cspot_start("M5Tab5");
 
