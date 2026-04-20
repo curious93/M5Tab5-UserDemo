@@ -102,14 +102,24 @@ CONFIG_LWIP_TCP_WND_DEFAULT=65535
 CONFIG_LWIP_TCP_SND_BUF_DEFAULT=65535
 CONFIG_LWIP_SO_RCVBUF=y
 
-# Push WiFi + LWIP dynamic allocations to PSRAM so internal DMA-capable
-# heap stays free for SDIO HW buffers. Note: enabling this raises
-# ESP_WIFI_STATIC_RX_BUFFER_NUM's default from 10 → 16 (kconfig safety
-# margin to compensate for slower PSRAM access). Attempting to override
-# static-RX back to 6 here is a no-op — kconfig enforces the new default.
-CONFIG_SPIRAM_TRY_ALLOCATE_WIFI_LWIP=y
+# DO NOT set CONFIG_SPIRAM_TRY_ALLOCATE_WIFI_LWIP=y on ESP32-P4 + C6 SDIO
+# WiFi. Despite the "keep internal heap free" intent, it raises
+# STATIC_RX_BUFFER_NUM's default from 10 → 16 (kconfig safety margin for
+# slower PSRAM), consuming MORE contiguous internal DMA-capable RAM upfront
+# and fragmenting what's left. Measured 2026-04-21:
+#   with=y: 344 Vorbis frames before sdio_rx_get_buffer assert
+#   no set: 4128 Vorbis frames (live.log.1, 10:39 CEST) — 12× longer
+# Keeping the default (commented out / not-set).
+# # CONFIG_SPIRAM_TRY_ALLOCATE_WIFI_LWIP is not set
 
-# Lower the "always internal" threshold so alloc()s up to 4 KB go to PSRAM
-# (default 16 KB). Internal DMA-capable heap stays free for SDIO / I2S /
-# TLS record buffers that must stay DMA-accessible.
-CONFIG_SPIRAM_MALLOC_ALWAYSINTERNAL=4096
+# NB: Tested CONFIG_SPIRAM_MALLOC_ALWAYSINTERNAL=4096 (down from default
+# 16384) on 2026-04-21 — it hurt playback (344 → 195 Vorbis frames). Moving
+# more allocations to PSRAM also moves some DMA-capable ones, which then
+# get served from a shrinking DMA-capable pool under fragmentation. Left
+# at default 16384.
+
+# Move WiFi TX/RX code from IRAM to flash — frees ~27 KB of internal heap,
+# all of it DMA-capable. Trade-off: slightly higher ISR latency. Fine for
+# Spotify streaming where throughput >> latency.
+CONFIG_ESP32_WIFI_IRAM_OPT=n
+CONFIG_ESP32_WIFI_RX_IRAM_OPT=n
