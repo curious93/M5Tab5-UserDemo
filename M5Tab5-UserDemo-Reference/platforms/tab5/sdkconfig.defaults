@@ -121,5 +121,8 @@ CONFIG_LWIP_SO_RCVBUF=y
 # Move WiFi TX/RX code from IRAM to flash — frees ~27 KB of internal heap,
 # all of it DMA-capable. Trade-off: slightly higher ISR latency. Fine for
 # Spotify streaming where throughput >> latency.
-CONFIG_ESP32_WIFI_IRAM_OPT=n
-CONFIG_ESP32_WIFI_RX_IRAM_OPT=n
+# (ESP-IDF 5.4 renamed CONFIG_ESP32_WIFI_IRAM_OPT to CONFIG_ESP_WIFI_IRAM_OPT;
+# set both to be safe across IDF versions.)
+CONFIG_ESP_WIFI_IRAM_OPT=n
+CONFIG_ESP_WIFI_RX_IRAM_OPT=n
+CONFIG_ESP_WIFI_EXTRA_IRAM_OPT=n
