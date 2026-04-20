@@ -98,6 +98,16 @@ CONFIG_LWIP_MAX_SOCKETS=16
 # fills the window, waits for ACK, and TLS read layers above return
 # WANT_READ before full records arrive. Bump to 64 KB. Also enable SO_RCVBUF
 # so apps can tune receive buffers.
-CONFIG_LWIP_TCP_WND_DEFAULT=65535
-CONFIG_LWIP_TCP_SND_BUF_DEFAULT=65535
+CONFIG_LWIP_TCP_WND_DEFAULT=16384
+CONFIG_LWIP_TCP_SND_BUF_DEFAULT=16384
 CONFIG_LWIP_SO_RCVBUF=y
+
+# Move WiFi + lwIP pbuf allocations to PSRAM — prevents SDIO DMA-capable
+# internal SRAM exhaustion during sustained CDN streaming (assert failed:
+# sdio_rx_get_buffer sdio_drv.c:670 crash after ~200 s of playback).
+CONFIG_SPIRAM_TRY_ALLOCATE_WIFI_LWIP=y
+
+# Disable SDIO RX streaming mode — it queues too many DMA-capable SRAM buffers.
+# RX_NONE gives the same throughput on ESP32-P4 without the memory blowup.
+CONFIG_ESP_HOSTED_SDIO_OPTIMIZATION_RX_NONE=y
+CONFIG_ESP_HOSTED_SDIO_RX_Q_SIZE=8
