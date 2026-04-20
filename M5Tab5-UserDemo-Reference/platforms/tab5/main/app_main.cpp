@@ -42,8 +42,21 @@ extern "C" void app_main(void)
     // Give WiFi time to connect before cspot needs the network
     vTaskDelay(pdMS_TO_TICKS(5000));
 
-    // Tremor selftest removed — Vorbis internal state never fully releases
-    // and steals DMA-capable heap that cspot's SDIO RX buffers need later.
+    // Tremor selftest runs BEFORE cspot: decodes an embedded 350 KB OGG
+    // through the full Vorbis stack. Its purpose is NOT the audible sine —
+    // it's to warm up the allocator. Tremor uses heap_caps_malloc_prefer
+    // (PSRAM first, internal fallback); running the full ov_open→ov_read→
+    // ov_clear cycle establishes the PSRAM-first pattern for Vorbis
+    // allocations. Without this, cspot's first TrackPlayer Vorbis state
+    // lands in internal DMA-capable heap instead of PSRAM, and the few KB
+    // it permanently steals is what pushes SDIO RX over the edge later.
+    //
+    // Measured 10:39 CEST today (live.log.1 lines 8914–11593): with
+    // selftest ON, feedPCMFrames reached 4128 (~3 min sustained). With
+    // selftest removed (2026-04-21 00:48 baseline) only 896 frames (~10 s).
+    ESP_LOGI(TAG, "running tremor selftest (PSRAM allocator warmup)...");
+    tremor_selftest_run();
+
     ESP_LOGI(TAG, "starting cspot...");
     cspot_start("M5Tab5");
 
