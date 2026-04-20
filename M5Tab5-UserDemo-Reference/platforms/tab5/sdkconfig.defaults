@@ -102,13 +102,13 @@ CONFIG_LWIP_TCP_WND_DEFAULT=65535
 CONFIG_LWIP_TCP_SND_BUF_DEFAULT=65535
 CONFIG_LWIP_SO_RCVBUF=y
 
-# Measured 2026-04-21 on ESP32-P4 + C6 SDIO WiFi:
+# Measured 2026-04-21 on ESP32-P4 + C6 SDIO WiFi with tremor_selftest OFF:
 #   PSRAM_TRY_ALLOCATE_WIFI_LWIP=y : 344 Vorbis frames before assert
 #   PSRAM_TRY_ALLOCATE_WIFI_LWIP  n :  51 Vorbis frames — far worse
-# Intuition was wrong: pushing LWIP to PSRAM isn't the bottleneck.
-# Measured DMA heap headroom is actually LARGER with =y (20.9 KB vs 19.5 KB).
-# Keeping it enabled.
-CONFIG_SPIRAM_TRY_ALLOCATE_WIFI_LWIP=y
+# …but with tremor_selftest restored (Step 2), the exact 10:39 config is
+# PSRAM_TRY_ALLOCATE_WIFI_LWIP NOT set (→ STATIC_RX=10). Test that
+# combination; if it reproduces the 4128-frame reference, keep NOT-set.
+# # CONFIG_SPIRAM_TRY_ALLOCATE_WIFI_LWIP is not set
 
 # NB: Tested CONFIG_SPIRAM_MALLOC_ALWAYSINTERNAL=4096 (down from default
 # 16384) on 2026-04-21 — it hurt playback (344 → 195 Vorbis frames). Moving
