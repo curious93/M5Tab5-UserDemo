@@ -108,3 +108,8 @@ CONFIG_LWIP_SO_RCVBUF=y
 # margin to compensate for slower PSRAM access). Attempting to override
 # static-RX back to 6 here is a no-op — kconfig enforces the new default.
 CONFIG_SPIRAM_TRY_ALLOCATE_WIFI_LWIP=y
+
+# Lower the "always internal" threshold so alloc()s up to 4 KB go to PSRAM
+# (default 16 KB). Internal DMA-capable heap stays free for SDIO / I2S /
+# TLS record buffers that must stay DMA-accessible.
+CONFIG_SPIRAM_MALLOC_ALWAYSINTERNAL=4096
