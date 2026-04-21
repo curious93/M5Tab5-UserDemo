@@ -2,6 +2,39 @@
 
 Binaries from specific commits frozen outside the git tree, with enough detail to reflash the exact bits without rebuilding. Snapshot path is host-local (`~/.claude/tab5/binaries/`) to keep this repo small.
 
+## `96d4943` — cspot 2-min-plus sustained audio (2026-04-21)
+
+- **Tag:** `cspot-audio-2min-plus-2026-04-21`
+- **Commit:** `96d4943` (main) / `a985672` (cspot) — 2026-04-21 10:10 +0200
+- **Snapshot path:** `~/.claude/tab5/binaries/96d4943/`
+
+**SHA256:**
+| File | SHA256 | Size |
+|---|---|---|
+| `bootloader.bin` | `5893be960d89ea517aecf1202cb8bcb3ef7df71354d5d30b42e80094da678a76` | 23 264 B |
+| `partition-table.bin` | `97ce22d502aaae32ae3de440ee5de7dc4782501c4faca6a91aef0dfe90ad256c` | 3 072 B |
+| `m5stack_tab5.bin` | `ffbfe4b856dcfbd3a733ebf734ae7b57ee1af52995c93b301667be63e70f802d` | ~3.6 MB |
+
+**Flash command:**
+```bash
+source ~/esp/esp-idf-v5.4.2-tab5/export.sh
+esptool.py --chip esp32p4 --port /dev/cu.usbmodem101 --baud 921600 \
+  --before=default_reset --after=hard_reset \
+  write_flash --flash_mode dio --flash_freq 80m --flash_size 16MB \
+  0x2000  ~/.claude/tab5/binaries/96d4943/bootloader.bin \
+  0x8000  ~/.claude/tab5/binaries/96d4943/partition-table.bin \
+  0x10000 ~/.claude/tab5/binaries/96d4943/m5stack_tab5.bin
+```
+
+**Why frozen:**
+
+Longest stable Spotify playback of the session (11 328 `feedPCMFrames` ≈ 120 s within the post-flash 180 s monitoring window, no `sdio_rx_get_buffer` assert, user-confirmed audible). Previous record from `b92abe1`: 7 520 frames / ~86 s. The difference from `b92abe1`:
+- `CONFIG_HEAP_TASK_TRACKING=y` added to `sdkconfig.defaults`
+- Per-range `heap_caps_get_info` log + panic alloc-failed callback added to `CDNAudioFile.cpp` and `app_main.cpp` (both compiled in but their output did not appear in the log for reasons yet to be explained — the longer playback happened anyway)
+- Full rebuild of `libcspot.a` (manually removed the cached `.obj` + `.a`)
+
+Hypothesis: `HEAP_TASK_TRACKING`'s +4 bytes per allocation shifts DMA-heap geometry enough that the small (~181 B) SDIO RX allocation still fits contiguously where it previously could not. Not yet validated by instrumentation.
+
 ## `b92abe1` — cspot sustained-audio (2026-04-21)
 
 - **Tag:** `cspot-audio-sustained-manual-trigger-2026-04-21`
