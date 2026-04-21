@@ -124,3 +124,8 @@ CONFIG_LWIP_SO_RCVBUF=y
 # CONFIG_ESP_WIFI_IRAM_OPT is not set
 # CONFIG_ESP_WIFI_RX_IRAM_OPT is not set
 # CONFIG_ESP_WIFI_EXTRA_IRAM_OPT is not set
+
+# Instrumentation: attribute each heap allocation to the creating task.
+# Needed so the failed-alloc callback in app_main can dump per-task DMA
+# ownership at the point of SDIO assert. ~4 bytes/alloc overhead.
+CONFIG_HEAP_TASK_TRACKING=y

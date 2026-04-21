@@ -2,6 +2,7 @@
 #include "freertos/task.h"
 #include "esp_log.h"
 #include "esp_task_wdt.h"
+#include "esp_heap_caps.h"
 #include "hal/hal_esp32.h"
 #include "cspot_idf.h"
 
@@ -10,9 +11,26 @@ static HalEsp32 g_hal;
 
 HalEsp32* GetTab5Hal() { return &g_hal; }
 
+// DIAG: invoked by the heap subsystem whenever any heap_caps_* allocation
+// fails, *before* panic/abort runs. Prints the failing request plus a
+// block-level histogram of the DMA-capable internal heap so we can see
+// fragmentation vs drain vs leak. Callback runs in the context of the
+// failing task — must NOT allocate.
+static void on_alloc_failed(size_t size, uint32_t caps, const char* function_name)
+{
+    ESP_LOGE("alloc_fail", "size=%u caps=0x%lx func=%s",
+             (unsigned)size, (unsigned long)caps,
+             function_name ? function_name : "?");
+    heap_caps_print_heap_info(MALLOC_CAP_DMA | MALLOC_CAP_INTERNAL);
+    heap_caps_print_heap_info(MALLOC_CAP_INTERNAL);
+}
+
 extern "C" void app_main(void)
 {
     ESP_LOGI(TAG, "booting...");
+    // Register the alloc-failure hook as the very first thing so any
+    // allocation failure anywhere — boot, auth, streaming — gets captured.
+    heap_caps_register_failed_alloc_callback(on_alloc_failed);
 
     // DIAG: verbose logs for the HTTP/TLS stack so we can see why
     // esp_http_client_read returns -1 after a 206 response is received.
