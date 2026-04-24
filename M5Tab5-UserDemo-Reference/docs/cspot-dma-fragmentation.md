@@ -97,3 +97,60 @@ Moves heap management code itself out of internal RAM. Small gain (~3 KB) but ne
 - Does disabling `ESP_HOSTED_SDIO_OPTIMIZATION_RX_STREAMING_MODE` actually let a 3 KB `lfb` satisfy SDIO RX? Need to read managed-component code to confirm the alternate buffer size.
 - Is the 6 KB variance in starting DMA-free (14 K – 21 K across trials) caused by randomized WiFi/Bluetooth coex init or by a specific non-deterministic component? If we can identify it, we might be able to force a deterministic boot-time layout.
 - Can we coredump-on-alloc-fail instead of abort, so a future failure gives us a full task list + per-task heap ownership via `idf.py coredump`?
+
+---
+
+## Update 2026-04-25 — Root cause confirmed, mempool fix implemented
+
+### Was hat sich seit dem 2026-04-24-Stand geändert
+
+Das obige Dokument framte den 4608-Byte aligned-alloc als unbekannten Verursacher und schlug "Pre-allocation pool" (Direction A) als Spekulation vor. Per Recherche und neue Messdaten ist die Ursache jetzt belegt — und der Fix anders, kleiner, gezielter.
+
+### Belegte Ursache
+
+Der ESP-Hosted Host-Mempool (`host/drivers/mempool/mempool.c`) wächst mit `MEM_ALLOC` = `esp_dma_capable_malloc`. Jeder frische Pool-Block (1536 B, MEMPOOL_ALIGNED) wird im DMA-Heap angelegt. Während der WiFi-Authentifizierung + ersten CDN-Verbindungen werden Dutzende Pakete gleichzeitig durch den Pool gereicht; der Pool wächst auf den Spitzenbedarf und gibt die DMA-Bytes nie zurück (sie wandern nur in den Pool-Free-List, sind also für andere DMA-Allokationen verloren).
+
+Messung (HEAD mit Prewarm-Instrumentierung, 2026-04-24):
+- DMA-Heap @boot: `free=184111 lfb=131068`
+- DMA-Heap pre-prewarm (nach WiFi): `free=139319 lfb=102396`
+- DMA-Heap pre-range[0..8191] (vor erstem CDN): **`free=2891 lfb=2672`**
+
+→ Zwischen WiFi-Up und erstem CDN-Range verschwinden 121 KB DMA. Das ist exakt die Größenordnung, die ein wachsender Mempool unter 80–100 simultan inflight-Paketen verbraucht.
+
+### Cross-Referenz: ESP-Hosted Issue #597
+
+[github.com/espressif/esp-hosted/issues/597](https://github.com/espressif/esp-hosted/issues/597) beschreibt dasselbe Problem: ESP32-P4 + C6 SDIO, `esp_dma_capable_malloc: Not enough heap memory`. Bestätigt unabhängig: processed RX-Buffer (im `from_slave_queue`) brauchen kein DMA — sie wurden bereits per memcpy aus dem `double_buf` extrahiert und werden nur noch von der WiFi-Stack-Software gelesen.
+
+### Fix (implementiert, in `patches/esp_hosted/mempool.c`)
+
+```c
+buf = heap_caps_malloc_prefer(MEMPOOL_ALIGNED(mp->block_size), 2,
+                              MALLOC_CAP_SPIRAM   | MALLOC_CAP_8BIT,
+                              MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT);
+```
+
+PSRAM-first, internal (non-DMA) als Fallback. Damit wandert der Mempool-Wachstum aus dem DMA-Heap heraus. Die echten DMA-Buffer (`double_buf` für die SDIO-Übertragung selbst) bleiben unberührt — die brauchen weiterhin DMA-Capability.
+
+### b92abe1 ist betroffen, nicht immun
+
+User-Klarstellung 2026-04-24: b92abe1 (Snapshot in `~/.claude/tab5/binaries/b92abe1/`) ist ein verifiziertes Working-Build mit sustained Playback. Frühere Plan-Notes, die ihn als "lucky tail of distribution" abqualifizierten, waren falsche Spekulation.
+
+ABER: Test 2026-04-24 23:58 mit b92abe1 + sauberem Deploy-Stack zeigt Crash bei `assert failed: sdio_rx_get_buffer sdio_drv.c:670 (*buf)` nach 3584 feedPCMFrames (~40 s Musik). Daraus folgt: b92abe1 ist gut genug für kurze Sessions, aber der Mempool-Fix ist auch für b92abe1 nötig, um deutlich längere sustained Playbacks zu ermöglichen.
+
+### Deploy-Stack Hinweise (gelernt aus Iteration 2026-04-24)
+
+Folgende Änderungen am Claude-Code-Hooks-Stack haben Boot-Loops verursacht und wurden zurückgerollt — NICHT wieder einbauen ohne ausgiebigen Test:
+
+- `~/.claude/hooks/post_flash_serial.py` MAX_TIME 60→360 s + IDLE_LIMIT 5→60 s: hält den Serial-Port lange offen, kann nachfolgende Flash-Versuche blockieren
+- Auto-Recovery-Block in demselben Hook: kann fälschlich triggern und mid-test reflashen
+- PreToolUse-Hook auf jeden Bash (`circles_detector`): kann esptool-Aufrufe stören
+- Stop-Hook auf auto_commit: läuft am Ende jeder Antwort und kann lange dauern
+
+Stand der Hooks ist jetzt (2026-04-25) auf den heute-früh-Stand: nur PostToolUse Bash → post_flash_serial + auto_commit + cspot_blob_scraper.
+
+### Nächste Schritte
+
+1. **Mempool-Fix isoliert flashen** (nur `mempool.c`-Änderung, ohne Prewarm/Checkpoints in app_main.cpp)
+2. ≥3 Min Sustained-Playback-Test
+3. Per-Range `lfb`-Trajektorie messen — sollte mit Fix oberhalb 5 KB bleiben
+4. Wenn Fix wirkt: Prewarm-Code aus `app_main.cpp` und `sdio_drv.c` rückbauen (war Experiment, jetzt nicht mehr nötig)
