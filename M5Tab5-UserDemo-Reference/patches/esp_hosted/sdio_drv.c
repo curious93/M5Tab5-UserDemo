@@ -48,8 +48,15 @@ static const char TAG[] = "H_SDIO_DRV";
 // max number of time to try to read write buffer available reg
 #define MAX_WRITE_BUF_RETRIES             50
 
-/* Actual data sdio_write max retry */
-#define MAX_SDIO_WRITE_RETRY              2
+/* Actual data sdio_write max retry.
+ * Tab5 ESP32-P4 Rev 1.3 + C6 slave: the C6 firmware sometimes isn't ready to
+ * accept the first writes immediately after sending the INIT event. Original
+ * value of 2 retries (no delay) crashed ~50% of boots with
+ * "Unrecoverable host sdio state, reset host mcu". Bumped to 20 with 5 ms
+ * backoff between retries — gives the C6 up to 100 ms to complete its
+ * post-init setup. */
+#define MAX_SDIO_WRITE_RETRY              20
+#define SDIO_WRITE_RETRY_DELAY_MS         5
 
 // this locks the sdio transaction at the driver level, instead of at the HAL layer
 #define USE_DRIVER_LOCK
@@ -481,6 +488,7 @@ static void sdio_write_task(void const* pvParameters)
 				retries++;
 				if (retries < MAX_SDIO_WRITE_RETRY) {
 					ESP_LOGD(TAG, "retry");
+					g_h.funcs->_h_msleep(SDIO_WRITE_RETRY_DELAY_MS);
 					continue;
 				} else {
 					SDIO_DRV_UNLOCK();
