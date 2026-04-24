@@ -3,6 +3,7 @@
 #include "esp_log.h"
 #include "esp_task_wdt.h"
 #include "esp_heap_caps.h"
+#include "esp_debug_helpers.h"
 #include "hal/hal_esp32.h"
 #include "cspot_idf.h"
 
@@ -12,15 +13,17 @@ static HalEsp32 g_hal;
 HalEsp32* GetTab5Hal() { return &g_hal; }
 
 // DIAG: invoked by the heap subsystem whenever any heap_caps_* allocation
-// fails, *before* panic/abort runs. Prints the failing request plus a
-// block-level histogram of the DMA-capable internal heap so we can see
-// fragmentation vs drain vs leak. Callback runs in the context of the
-// failing task — must NOT allocate.
+// fails, *before* panic/abort runs. Prints the failing request + backtrace
+// of the calling task so we can identify WHO demanded the DMA block (the
+// reported function_name is just heap_caps_aligned_alloc — useless for
+// attribution). Callback runs in the failing task's context — must NOT
+// allocate; esp_backtrace_print and the heap dumps use stack only.
 static void on_alloc_failed(size_t size, uint32_t caps, const char* function_name)
 {
     ESP_LOGE("alloc_fail", "size=%u caps=0x%lx func=%s",
              (unsigned)size, (unsigned long)caps,
              function_name ? function_name : "?");
+    esp_backtrace_print(12);
     heap_caps_print_heap_info(MALLOC_CAP_DMA | MALLOC_CAP_INTERNAL);
     heap_caps_print_heap_info(MALLOC_CAP_INTERNAL);
 }
