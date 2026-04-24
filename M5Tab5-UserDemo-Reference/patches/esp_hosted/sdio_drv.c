@@ -680,29 +680,6 @@ static void sdio_rx_free_buffer(uint8_t * buf)
 	// no op - keep the allocated static buffer as it is
 }
 
-// Pre-warm both double-buf slots to warmup_size bytes.
-// Call this after WiFi is stable but before CDN streaming starts.
-// Prevents the lazy-grow realloc from fragmenting DMA during the first burst.
-void sdio_rx_prewarm(uint32_t warmup_size)
-{
-#if H_SDIO_RX_BLOCK_ONLY_XFER
-	warmup_size = ((warmup_size + ESP_BLOCK_SIZE - 1) / ESP_BLOCK_SIZE) * ESP_BLOCK_SIZE;
-#endif
-	for (int i = 0; i < 2; i++) {
-		uint8_t **buf = &double_buf.buffer[i].buf;
-		if (warmup_size > double_buf.buffer[i].buf_size) {
-			if (*buf) { g_h.funcs->_h_free(*buf); }
-			*buf = (uint8_t *)MEM_ALLOC(warmup_size);
-			if (*buf) {
-				double_buf.buffer[i].buf_size = warmup_size;
-				ESP_LOGI(TAG, "prewarm slot[%d] %u B OK", i, (unsigned)warmup_size);
-			} else {
-				ESP_LOGE(TAG, "prewarm slot[%d] %u B FAILED", i, (unsigned)warmup_size);
-			}
-		}
-	}
-}
-
 // extract packets from the stream and push on to the queue
 static esp_err_t sdio_push_data_to_queue(uint8_t * buf, uint32_t buf_len)
 {

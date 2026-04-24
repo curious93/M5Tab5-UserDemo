@@ -18,7 +18,6 @@
 #define __SDIO_DRV_H
 
 /** Includes **/
-#include "stdint.h"
 #include "common.h"
 
 /** Constants/Macros **/
@@ -30,6 +29,5 @@
 /** Inline functions **/
 
 /** Exported Functions **/
-void sdio_rx_prewarm(uint32_t warmup_size);
 
 #endif /* __SDIO_DRV_H */
