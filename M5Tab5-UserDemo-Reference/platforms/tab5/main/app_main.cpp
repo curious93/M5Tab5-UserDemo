@@ -29,9 +29,16 @@ static void on_alloc_failed(size_t size, uint32_t caps, const char* function_nam
 extern "C" void app_main(void)
 {
     ESP_LOGI(TAG, "booting...");
-    // Register the alloc-failure hook as the very first thing so any
-    // allocation failure anywhere — boot, auth, streaming — gets captured.
     heap_caps_register_failed_alloc_callback(on_alloc_failed);
+    {
+        multi_heap_info_t i;
+        heap_caps_get_info(&i, MALLOC_CAP_DMA | MALLOC_CAP_INTERNAL);
+        ESP_LOGI(TAG, "DMA-heap @boot: total=%u free=%u lfb=%u blk=%u",
+                 (unsigned)i.total_allocated_bytes + (unsigned)i.total_free_bytes,
+                 (unsigned)i.total_free_bytes,
+                 (unsigned)i.largest_free_block,
+                 (unsigned)i.allocated_blocks);
+    }
 
     // DIAG: verbose logs for the HTTP/TLS stack so we can see why
     // esp_http_client_read returns -1 after a 206 response is received.
