@@ -69,6 +69,25 @@ extern "C" void app_main(void)
     // Give WiFi time to connect before cspot needs the network
     vTaskDelay(pdMS_TO_TICKS(5000));
 
+    // Pre-warm the SDIO double-buffer slots before CDN streaming begins.
+    // sdio_rx_get_buffer() lazy-grows the buffer on first use: free(old)+alloc(new)
+    // fragments DMA at exactly the moment lfb is ~17 KB. Pre-warming here (after WiFi
+    // has consumed its share) reserves 8192 B per slot without competing with WiFi init.
+    // 8192 = ceil(5 × 1536) covers up to 5-packet bursts; observed max is 4 (6144 B).
+    {
+        multi_heap_info_t i;
+        heap_caps_get_info(&i, MALLOC_CAP_DMA | MALLOC_CAP_INTERNAL);
+        ESP_LOGI(TAG, "DMA-heap pre-prewarm: free=%u lfb=%u",
+                 (unsigned)i.total_free_bytes, (unsigned)i.largest_free_block);
+    }
+    sdio_rx_prewarm(8192);
+    {
+        multi_heap_info_t i;
+        heap_caps_get_info(&i, MALLOC_CAP_DMA | MALLOC_CAP_INTERNAL);
+        ESP_LOGI(TAG, "DMA-heap post-prewarm: free=%u lfb=%u",
+                 (unsigned)i.total_free_bytes, (unsigned)i.largest_free_block);
+    }
+
     // Tremor selftest runs BEFORE cspot: decodes an embedded 350 KB OGG
     // through the full Vorbis stack. Its purpose is NOT the audible sine —
     // it's to warm up the allocator. Tremor uses heap_caps_malloc_prefer
