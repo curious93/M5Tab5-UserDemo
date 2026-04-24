@@ -24,7 +24,6 @@ static void on_alloc_failed(size_t size, uint32_t caps, const char* function_nam
              (unsigned)size, (unsigned long)caps,
              function_name ? function_name : "?");
     heap_caps_print_heap_info(MALLOC_CAP_DMA | MALLOC_CAP_INTERNAL);
-    heap_caps_dump(MALLOC_CAP_DMA | MALLOC_CAP_INTERNAL);
 }
 
 extern "C" void app_main(void)
