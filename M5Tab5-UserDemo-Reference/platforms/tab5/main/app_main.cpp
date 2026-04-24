@@ -103,6 +103,13 @@ extern "C" void app_main(void)
     ESP_LOGI(TAG, "running tremor selftest (PSRAM allocator warmup)...");
     tremor_selftest_run();
 
+    {
+        multi_heap_info_t i;
+        heap_caps_get_info(&i, MALLOC_CAP_DMA | MALLOC_CAP_INTERNAL);
+        ESP_LOGI(TAG, "DMA-heap post-tremor: free=%u lfb=%u",
+                 (unsigned)i.total_free_bytes, (unsigned)i.largest_free_block);
+    }
+
     ESP_LOGI(TAG, "starting cspot...");
     cspot_start("M5Tab5");
 
