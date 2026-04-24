@@ -6,7 +6,7 @@
 #include "esp_debug_helpers.h"
 #include "hal/hal_esp32.h"
 #include "cspot_idf.h"
-#include "sdio_drv.h"
+extern "C" void sdio_rx_prewarm(uint32_t warmup_size);
 
 static const char* TAG = "app";
 static HalEsp32 g_hal;
