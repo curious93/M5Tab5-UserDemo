@@ -377,6 +377,13 @@ static void sdio_write_task(void const* pvParameters)
 	while (!sdio_start_write_thread)
 		g_h.funcs->_h_msleep(10);
 
+	/* Tab5 ESP32-P4 + C6 slave: C6 sends the INIT event packet BEFORE its
+	 * SDIO RX path is ready to accept writes. Without this grace period,
+	 * the first 20+ sdio_write attempts return ESP_ERR_INVALID_RESPONSE
+	 * (258) and the driver gives up with "Unrecoverable host sdio state".
+	 * 300 ms is empirical headroom (observed crash ~14 ms after INIT). */
+	g_h.funcs->_h_msleep(300);
+
 	for (;;) {
 		/* Check if higher layers have anything to transmit */
 		g_h.funcs->_h_get_semaphore(sem_to_slave_queue, HOSTED_BLOCK_MAX);
