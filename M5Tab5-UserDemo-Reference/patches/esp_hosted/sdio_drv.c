@@ -1114,6 +1114,22 @@ void transport_init_internal(void)
 	double_buf.read_index = -1; // indicates we are not reading anything
 	double_buf.write_index = 0; // we will write into the first buffer
 
+	// Pre-allocate SDIO RX DMA buffers at init time (before CDN starts
+	// fragmenting DMA heap). SDIO RX frames can reach 7168 bytes (14 × 512
+	// blocks) during CDN bursts. Reserving 8192 bytes per slot guarantees
+	// the sdio_rx_get_buffer() "len > buf_size" realloc never fires at
+	// runtime — avoiding DMA alloc_fail → PSRAM fallback → err=258 chain.
+	for (int _i = 0; _i < 2; _i++) {
+		double_buf.buffer[_i].buf = (uint8_t *)heap_caps_aligned_alloc(
+			64, 8192, MALLOC_CAP_DMA | MALLOC_CAP_INTERNAL);
+		if (double_buf.buffer[_i].buf) {
+			double_buf.buffer[_i].buf_size = 8192;
+			ESP_LOGI(TAG, "sdio_drv: pre-alloc double_buf[%d] 8192 bytes DMA OK", _i);
+		} else {
+			ESP_LOGW(TAG, "sdio_drv: pre-alloc double_buf[%d] failed, runtime alloc", _i);
+		}
+	}
+
 	sem_double_buf_xfer_data = g_h.funcs->_h_create_semaphore(1);
 	assert(sem_double_buf_xfer_data);
 	g_h.funcs->_h_get_semaphore(sem_double_buf_xfer_data, HOSTED_BLOCK_MAX);
