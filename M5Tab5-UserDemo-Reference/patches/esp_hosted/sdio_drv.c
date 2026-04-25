@@ -670,17 +670,26 @@ static uint8_t * sdio_rx_get_buffer(uint32_t len)
 	uint8_t ** buf = &double_buf.buffer[index].buf;
 
 	if (len > double_buf.buffer[index].buf_size) {
-		// Try DMA-capable internal RAM first (preferred for SDIO DMA throughput).
-		// On ESP32-P4 the DMA heap fragments under sustained CDN streaming
-		// (1664B lwip pbufs + ~6KB SDIO RX bursts), so fall back to 64-byte
-		// aligned PSRAM — the SDIO peripheral can DMA into PSRAM on P4 when
-		// cache aligns to 64B (same approach as pkt_rxbuff fix in commit 97a165b).
-		uint8_t *new_buf = (uint8_t *)MEM_ALLOC(len);
+		// Retry DMA-capable alloc for up to 1000 ms before falling back to PSRAM.
+		// PSRAM-backed DMA buffers cause SDIO block reads to time out (err=258)
+		// under concurrent CDN streaming — the DMA controller is slower writing
+		// to PSRAM than IRAM, exceeding the SDIO hardware timeout.
+		// A 1 s wait gives lwIP/CDN tasks time to free DMA pbufs so the heap
+		// recovers without touching PSRAM.  If the read still fails with a
+		// PSRAM buffer, buf_size is reset to 0 (in sdio_read_task) so the
+		// next packet retries DMA allocation rather than reusing PSRAM.
+		uint8_t *new_buf = NULL;
+		for (int _retry = 0; _retry < 50 && !new_buf; _retry++) {
+			new_buf = (uint8_t *)MEM_ALLOC(len);
+			if (!new_buf)
+				vTaskDelay(pdMS_TO_TICKS(20));
+		}
 		if (!new_buf) {
+			// DMA heap didn't recover in 1000 ms — PSRAM is last resort.
 			new_buf = (uint8_t *)heap_caps_aligned_alloc(64, len,
 				MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
 			if (new_buf) {
-				ESP_LOGW(TAG, "sdio_rx: DMA exhausted, alloc(%ld) from PSRAM", (long)len);
+				ESP_LOGW(TAG, "sdio_rx: DMA exhausted after retries, alloc(%ld) from PSRAM", (long)len);
 			}
 		}
 		if (!new_buf) {
@@ -932,6 +941,11 @@ static void sdio_read_task(void const* pvParameters)
 				ESP_LOGE(TAG, "%s: Failed to read data - %d %ld %ld",
 					__func__, ret, len_to_read, data_left);
 				sdio_rx_free_buffer(rxbuff);
+				/* If a PSRAM-backed buffer caused the DMA transfer failure,
+				 * force a fresh DMA alloc on the next packet by marking the
+				 * slot as empty.  Without this, the same PSRAM pointer stays
+				 * in double_buf and every subsequent SDIO read also fails. */
+				double_buf.buffer[double_buf.write_index].buf_size = 0;
 				break;
 			}
 			data_left -= len_to_read;

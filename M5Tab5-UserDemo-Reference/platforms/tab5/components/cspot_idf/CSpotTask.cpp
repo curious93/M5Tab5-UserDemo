@@ -114,7 +114,13 @@ CSpotPlayer::CSpotPlayer(std::shared_ptr<cspot::SpircHandler> handler)
                     // waiting to be drained to the DAC. Flushing here throws
                     // that tail away, so each track becomes audible for only
                     // the ~350 ms that reached the DMA before EOF.
-                    ESP_LOGI(TAG, "event PLAYBACK_START — keep buffer");
+                    //
+                    // Always resume output: if trackLoadedCallback fires paused=1
+                    // (e.g. because natural EOF set state=Paused before REPLACE
+                    // arrived), the new track would silently decode into the buffer
+                    // but never reach the DAC.  A skip/next always means play.
+                    ESP_LOGI(TAG, "event PLAYBACK_START — keep buffer, unpause");
+                    _paused = false;
                     break;
                 default:
                     break;
