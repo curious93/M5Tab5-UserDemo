@@ -670,14 +670,16 @@ static uint8_t * sdio_rx_get_buffer(uint32_t len)
 	uint8_t ** buf = &double_buf.buffer[index].buf;
 
 	if (len > double_buf.buffer[index].buf_size) {
+		uint8_t *new_buf = (uint8_t *)MEM_ALLOC(len);
+		if (!new_buf) {
+			ESP_LOGE(TAG, "sdio_rx: DMA alloc(%ld) failed, dropping packet", (long)len);
+			return NULL;
+		}
 		if (*buf) {
-			// free already allocated memory
 			g_h.funcs->_h_free(*buf);
 		}
-		*buf = (uint8_t *)MEM_ALLOC(len);
-		assert(*buf);
+		*buf = new_buf;
 		double_buf.buffer[index].buf_size = len;
-		ESP_LOGD(TAG, "buf %d size: %ld", index, double_buf.buffer[index].buf_size);
 	}
 	return *buf;
 }
@@ -889,7 +891,10 @@ static void sdio_read_task(void const* pvParameters)
 
 		/* Allocate rx buffer */
 		rxbuff = sdio_rx_get_buffer(len_from_slave);
-		assert(rxbuff);
+		if (!rxbuff) {
+			SDIO_DRV_UNLOCK();
+			continue;
+		}
 
 		data_left = len_from_slave;
 		pos = rxbuff;
