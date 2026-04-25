@@ -108,7 +108,10 @@ CONFIG_LWIP_SO_RCVBUF=y
 # …but with tremor_selftest restored (Step 2), the exact 10:39 config is
 # PSRAM_TRY_ALLOCATE_WIFI_LWIP NOT set (→ STATIC_RX=10). Test that
 # combination; if it reproduces the 4128-frame reference, keep NOT-set.
-# # CONFIG_SPIRAM_TRY_ALLOCATE_WIFI_LWIP is not set
+# Enabled: lwip TCP pbufs (1664B DMA-aligned) go to PSRAM, preventing
+# DMA fragmentation crash after 38s HTTPS prefetch download.
+# Safe with ESP-Hosted: pkt_rxbuff already in PSRAM; TX sendbuf stays DMA.
+CONFIG_SPIRAM_TRY_ALLOCATE_WIFI_LWIP=y
 
 # NB: Tested CONFIG_SPIRAM_MALLOC_ALWAYSINTERNAL=4096 (down from default
 # 16384) on 2026-04-21 — it hurt playback (344 → 195 Vorbis frames). Moving
