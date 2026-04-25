@@ -60,11 +60,7 @@ extern "C" void app_main(void)
     // Factory firmware starts SDIO/C6 init at ~7.5s uptime (after display +
     // audio + launcher are all up). We need to give the C6 similar time to
     // fully boot — otherwise SDIO init races the C6 ROM and fails.
-    // Bumped 6 → 9s on 2026-04-25: 6s caused intermittent
-    // "Unrecoverable host sdio state" right after the C6 INIT event. The C6
-    // had announced itself but its SDIO RX path wasn't yet ready for CMD53s.
-    // 9s gives consistent margin and matches the factory firmware's timing.
-    vTaskDelay(pdMS_TO_TICKS(9000));
+    vTaskDelay(pdMS_TO_TICKS(6000));
 
     ESP_LOGI(TAG, "starting WiFi STA...");
     g_hal.startWifiSta("Ingrid", "Loggo03!");
