@@ -13,3 +13,6 @@ boot_log.txt
 
 # Local Claude Code state (local permissions, scheduled task locks)
 .claude/
+flash_env/lib/python3.9/site-packages/pyserial*
+flash_env/lib/python3.9/site-packages/serial/
+flash_env/bin/pyserial-*
