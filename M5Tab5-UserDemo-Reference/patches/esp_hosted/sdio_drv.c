@@ -670,9 +670,21 @@ static uint8_t * sdio_rx_get_buffer(uint32_t len)
 	uint8_t ** buf = &double_buf.buffer[index].buf;
 
 	if (len > double_buf.buffer[index].buf_size) {
+		// Try DMA-capable internal RAM first (preferred for SDIO DMA throughput).
+		// On ESP32-P4 the DMA heap fragments under sustained CDN streaming
+		// (1664B lwip pbufs + ~6KB SDIO RX bursts), so fall back to 64-byte
+		// aligned PSRAM — the SDIO peripheral can DMA into PSRAM on P4 when
+		// cache aligns to 64B (same approach as pkt_rxbuff fix in commit 97a165b).
 		uint8_t *new_buf = (uint8_t *)MEM_ALLOC(len);
 		if (!new_buf) {
-			ESP_LOGE(TAG, "sdio_rx: DMA alloc(%ld) failed, dropping packet", (long)len);
+			new_buf = (uint8_t *)heap_caps_aligned_alloc(64, len,
+				MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
+			if (new_buf) {
+				ESP_LOGW(TAG, "sdio_rx: DMA exhausted, alloc(%ld) from PSRAM", (long)len);
+			}
+		}
+		if (!new_buf) {
+			ESP_LOGE(TAG, "sdio_rx: alloc(%ld) failed (DMA+PSRAM both exhausted)", (long)len);
 			return NULL;
 		}
 		if (*buf) {
@@ -889,7 +901,7 @@ static void sdio_read_task(void const* pvParameters)
 		}
 #endif
 
-		/* Allocate rx buffer */
+		/* Allocate rx buffer (DMA → PSRAM fallback inside helper) */
 		rxbuff = sdio_rx_get_buffer(len_from_slave);
 		if (!rxbuff) {
 			SDIO_DRV_UNLOCK();
