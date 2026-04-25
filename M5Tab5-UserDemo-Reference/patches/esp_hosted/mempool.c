@@ -113,11 +113,7 @@ void * mempool_alloc(struct mempool* mp, int nbytes, int need_memset)
 
 		g_h.funcs->_h_unlock_mempool(mp->spinlock);
 
-		/* Processed RX packets do not need DMA-capable memory — prefer PSRAM
-		 * to leave the DMA heap free for SDIO transfer buffers (double_buf). */
-		buf = heap_caps_malloc_prefer(MEMPOOL_ALIGNED(mp->block_size), 2,
-		                              MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT,
-		                              MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT);
+		buf = MEM_ALLOC(MEMPOOL_ALIGNED(mp->block_size));
 #if H_MEM_STATS
 		h_stats_g.mp_stats.num_fresh_alloc++;
 		ESP_LOGV(MEM_TAG, "%p: num_alloc: %lu", mp, (unsigned long int)(h_stats_g.mp_stats.num_fresh_alloc));

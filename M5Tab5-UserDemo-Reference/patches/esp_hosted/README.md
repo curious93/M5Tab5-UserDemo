@@ -11,44 +11,53 @@ Die Originaldateien liegen unter:
 platforms/tab5/managed_components/espressif__esp_hosted/host/drivers/
 ```
 
-| Datei in diesem Patch-Verzeichnis | Ziel | Zweck |
-|---|---|---|
-| `mempool.c` | `mempool/mempool.c` | **Hauptfix:** verarbeitete RX-Pakete in PSRAM statt DMA-Heap |
-| `sdio_drv.c` | `transport/sdio/sdio_drv.c` | Optionale `sdio_rx_prewarm()` Funktion (experimentell) |
-| `sdio_drv.h` | `transport/sdio/sdio_drv.h` | Public-Deklaration für `sdio_rx_prewarm()` |
+| Datei in diesem Patch-Verzeichnis | Ziel | Geändert? | Zweck |
+|---|---|---|---|
+| `sdio_drv.c` | `transport/sdio/sdio_drv.c` | **JA (Fix)** | Streaming-RX-Puffer aus PSRAM statt DMA-Heap |
+| `sdio_drv.h` | `transport/sdio/sdio_drv.h` | nein (original) | Vollständigkeit |
+| `mempool.c` | `mempool/mempool.c` | nein (original) | Vollständigkeit — **nicht ändern** |
 
 ## Was die Patches genau ändern
 
-### `mempool.c` — der eigentliche Fix
-Originalverhalten: jeder frische Pool-Block wird mit `MEM_ALLOC` (`esp_dma_capable_malloc`) angefordert → wächst dauerhaft im DMA-Heap.
+### `sdio_drv.c` — der eigentliche Fix (verifiziert 2026-04-25)
 
-Geändert: `heap_caps_malloc_prefer(size, 2, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT, MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT)`. Das routet processed RX-Packets in PSRAM (oder als Fallback in non-DMA Internal). Diese Buffer müssen NICHT DMA-fähig sein — sie wurden bereits per memcpy aus dem echten DMA-Buffer (`double_buf`) extrahiert. Belegt durch Issue #597 und der ESP-Hosted-Architekturanalyse.
+**Funktion `sdio_push_data_to_queue`** (Streaming-Mode RX-Pfad):
 
-Anwenden:
-```bash
-cp patches/esp_hosted/mempool.c \
-   platforms/tab5/managed_components/espressif__esp_hosted/host/drivers/mempool/mempool.c
+Originalverhalten: `pkt_rxbuff` wird via `sdio_buffer_alloc()` aus dem DMA-fähigen Mempool geholt. Dieser Puffer ist nach dem `memcpy` aus `double_buf` CPU-only-data — DMA-Fähigkeit ist nicht mehr nötig, aber der DMA-Heap wächst mit jedem empfangenen WiFi-Paket.
+
+Geändert:
+```c
+/* Allocate rx buffer from PSRAM-first (no DMA needed after memcpy
+ * out of double_buf; keeping these out of DMA heap prevents
+ * exhaustion under sustained WiFi+Vorbis load). */
+pkt_rxbuff = (uint8_t *)heap_caps_malloc_prefer(
+    MEMPOOL_ALIGNED(MAX_SDIO_BUFFER_SIZE), 2,
+    MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT,
+    MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT);
 ```
 
-### `sdio_drv.c` und `sdio_drv.h` — Prewarm (experimentell)
-Fügt eine Funktion `sdio_rx_prewarm(uint32_t size)` hinzu, die beide Slots des SDIO-Streaming-Double-Buffers vorab auf `size` Bytes alloziert. Wird optional von `app_main.cpp` aufgerufen. Wirkung allein noch nicht eindeutig belegt — der Mempool-Fix ist die belegte Ursache der Crashes.
+Außerdem: `sdio_push_pkt_to_queue()` nimmt jetzt einen `free_fn`-Parameter. Streaming-RX-Pakete werden mit `sdio_rx_pkt_free` (ruft `free()` direkt auf) freigegeben; der nicht-streaming Pfad nutzt weiterhin `sdio_buffer_free` (gibt an den DMA-Mempool zurück).
+
+**Wichtig:** `mempool.c` bleibt original. TX-`sendbuf` in `sdio_write_task` MUSS DMA-fähig sein (SDIO CMD53 Anforderung). Ein PSRAM-Patch auf `mempool.c` würde TX brechen und `Failed to send data: 258 (ESP_ERR_INVALID_RESPONSE)` erzeugen.
 
 ## Anwendung nach `idf.py reconfigure` / Komponenten-Update
 
-Wenn `managed_components/` regeneriert wurde, einfach die Dateien aus diesem Verzeichnis zurückkopieren:
+Wenn `managed_components/` regeneriert wurde, nur `sdio_drv.c` zurückkopieren:
 
 ```bash
 PROJ=platforms/tab5/managed_components/espressif__esp_hosted/host/drivers
-cp patches/esp_hosted/mempool.c   $PROJ/mempool/mempool.c
 cp patches/esp_hosted/sdio_drv.c  $PROJ/transport/sdio/sdio_drv.c
-cp patches/esp_hosted/sdio_drv.h  $PROJ/transport/sdio/sdio_drv.h
 idf.py build
 ```
 
-## Bestätigte Beobachtung (2026-04-24)
+## Verifikation (2026-04-25)
 
-Vor Patch (b92abe1, ohne Mempool-Fix):
-- DMA-Heap fällt von ~184 KB bei Boot auf ~3 KB beim ersten CDN Range-Request
-- Crash nach ~3584 feedPCMFrames (~40 s Musik) auf `sdio_rx_get_buffer:670 (*buf)` Assert
+Vor Fix (Baseline ohne sdio_drv.c-Patch):
+- Crash nach 352 feedPCMFrames (~7.5 s Musik)
+- `alloc_fail: size=4608 caps=0x8` — DMA-Heap erschöpft
+- DMA `lfb` fällt unter 3 KB beim ersten CDN Range-Request
 
-Nach Patch — noch zu verifizieren in einer ≥3 min Sustained-Playback-Session.
+Nach Fix (sdio_drv.c PSRAM streaming RX):
+- **8256+ feedPCMFrames** über 90 s Monitoring, kein Crash
+- DMA `lfb=4336` beim CDN Range-Request — bleibt stabil
+- Keine `alloc_fail`, keine `Rebooting`

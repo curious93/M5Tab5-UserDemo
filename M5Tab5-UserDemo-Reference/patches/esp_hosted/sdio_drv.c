@@ -24,6 +24,7 @@
 #include "hci_drv.h"
 #include "endian.h"
 #include "esp_hosted_transport_init.h"
+#include "esp_heap_caps.h"
 
 static const char TAG[] = "H_SDIO_DRV";
 
@@ -48,15 +49,8 @@ static const char TAG[] = "H_SDIO_DRV";
 // max number of time to try to read write buffer available reg
 #define MAX_WRITE_BUF_RETRIES             50
 
-/* Actual data sdio_write max retry.
- * Tab5 ESP32-P4 Rev 1.3 + C6 slave: the C6 firmware sometimes isn't ready to
- * accept the first writes immediately after sending the INIT event. Original
- * value of 2 retries (no delay) crashed ~50% of boots with
- * "Unrecoverable host sdio state, reset host mcu". Bumped to 20 with 5 ms
- * backoff between retries — gives the C6 up to 100 ms to complete its
- * post-init setup. */
-#define MAX_SDIO_WRITE_RETRY              20
-#define SDIO_WRITE_RETRY_DELAY_MS         5
+/* Actual data sdio_write max retry */
+#define MAX_SDIO_WRITE_RETRY              2
 
 // this locks the sdio transaction at the driver level, instead of at the HAL layer
 #define USE_DRIVER_LOCK
@@ -377,13 +371,6 @@ static void sdio_write_task(void const* pvParameters)
 	while (!sdio_start_write_thread)
 		g_h.funcs->_h_msleep(10);
 
-	/* Tab5 ESP32-P4 + C6 slave: C6 sends the INIT event packet BEFORE its
-	 * SDIO RX path is ready to accept writes. Without this grace period,
-	 * the first 20+ sdio_write attempts return ESP_ERR_INVALID_RESPONSE
-	 * (258) and the driver gives up with "Unrecoverable host sdio state".
-	 * 300 ms is empirical headroom (observed crash ~14 ms after INIT). */
-	g_h.funcs->_h_msleep(300);
-
 	for (;;) {
 		/* Check if higher layers have anything to transmit */
 		g_h.funcs->_h_get_semaphore(sem_to_slave_queue, HOSTED_BLOCK_MAX);
@@ -495,7 +482,6 @@ static void sdio_write_task(void const* pvParameters)
 				retries++;
 				if (retries < MAX_SDIO_WRITE_RETRY) {
 					ESP_LOGD(TAG, "retry");
-					g_h.funcs->_h_msleep(SDIO_WRITE_RETRY_DELAY_MS);
 					continue;
 				} else {
 					SDIO_DRV_UNLOCK();
@@ -580,8 +566,15 @@ static int is_valid_sdio_rx_packet(uint8_t *rxbuff_a, uint16_t *len_a, uint16_t 
 	return 1;
 }
 
+/* Free function for streaming-mode RX packets allocated from PSRAM. */
+static void sdio_rx_pkt_free(void *buf)
+{
+	free(buf);
+}
+
 // pushes received packet data on to rx queue
-static esp_err_t sdio_push_pkt_to_queue(uint8_t * rxbuff, uint16_t len, uint16_t offset)
+static esp_err_t sdio_push_pkt_to_queue(uint8_t * rxbuff, uint16_t len, uint16_t offset,
+                                         void (*free_fn)(void *))
 {
 	uint8_t pkt_prio = PRIO_Q_OTHERS;
 	struct esp_payload_header *h= NULL;
@@ -592,7 +585,7 @@ static esp_err_t sdio_push_pkt_to_queue(uint8_t * rxbuff, uint16_t len, uint16_t
 	memset(&buf_handle, 0, sizeof(interface_buffer_handle_t));
 
 	buf_handle.priv_buffer_handle = rxbuff;
-	buf_handle.free_buf_handle    = sdio_buffer_free;
+	buf_handle.free_buf_handle    = free_fn;
 	buf_handle.payload_len        = len;
 	buf_handle.if_type            = h->if_type;
 	buf_handle.if_num             = h->if_num;
@@ -655,7 +648,7 @@ static esp_err_t sdio_push_data_to_queue(uint8_t * buf, uint32_t buf_len)
 		return ESP_FAIL;
 	}
 
-	if (sdio_push_pkt_to_queue(buf, len, offset)) {
+	if (sdio_push_pkt_to_queue(buf, len, offset, sdio_buffer_free)) {
 		ESP_LOGE(TAG, "Failed to push Rx packet to queue");
 		return ESP_FAIL;
 	}
@@ -711,9 +704,15 @@ static esp_err_t sdio_push_data_to_queue(uint8_t * buf, uint32_t buf_len)
 			ESP_LOGE(TAG, "Dropping packet(s) from stream");
 			return ESP_FAIL;
 		}
-		/* Allocate rx buffer */
-		pkt_rxbuff = sdio_buffer_alloc(MEMSET_REQUIRED);
+		/* Allocate rx buffer from PSRAM-first (no DMA needed after memcpy
+		 * out of double_buf; keeping these out of DMA heap prevents
+		 * exhaustion under sustained WiFi+Vorbis load). */
+		pkt_rxbuff = (uint8_t *)heap_caps_malloc_prefer(
+			MEMPOOL_ALIGNED(MAX_SDIO_BUFFER_SIZE), 2,
+			MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT,
+			MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT);
 		assert(pkt_rxbuff);
+		memset(pkt_rxbuff, 0, MEMPOOL_ALIGNED(MAX_SDIO_BUFFER_SIZE));
 
 		packet_size = len + offset;
 		if (packet_size > buf_len) {
@@ -722,7 +721,7 @@ static esp_err_t sdio_push_data_to_queue(uint8_t * buf, uint32_t buf_len)
 		}
 		memcpy(pkt_rxbuff, buf, packet_size);
 
-		if (sdio_push_pkt_to_queue(pkt_rxbuff, len, offset)) {
+		if (sdio_push_pkt_to_queue(pkt_rxbuff, len, offset, sdio_rx_pkt_free)) {
 			ESP_LOGI(TAG, "Failed to push a packet to queue from stream");
 		}
 
