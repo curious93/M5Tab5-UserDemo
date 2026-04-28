@@ -1,5 +1,6 @@
 #include "CSpotTask.h"
 #include "cspot_idf.h"
+#include "cspot_ui_state.h"
 
 #include <CSpotContext.h>
 #include <LoginBlob.h>
@@ -9,6 +10,9 @@
 #include <MDNSService.h>
 #include <Logger.h>
 #include <BellUtils.h>
+
+// internal hook from cspot_ui_state.cpp
+namespace cspot_ui_internal { void register_handler(cspot::SpircHandler*); }
 
 #include <esp_log.h>
 #include <esp_wifi.h>
@@ -98,12 +102,33 @@ CSpotPlayer::CSpotPlayer(std::shared_ptr<cspot::SpircHandler> handler)
                     bool paused = std::get<bool>(ev->data);
                     ESP_LOGI(TAG, "event PLAY_PAUSE paused=%d", paused ? 1 : 0);
                     _paused = paused;
+                    cspot_ui_state_set_paused(paused);
+                    break;
+                }
+                case cspot::SpircHandler::EventType::TRACK_INFO: {
+                    auto& ti = std::get<cspot::TrackInfo>(ev->data);
+                    ESP_LOGI(TAG, "event TRACK_INFO: '%s' / '%s' (%u ms)",
+                             ti.name.c_str(), ti.artist.c_str(),
+                             (unsigned)ti.duration);
+                    cspot_ui_state_set_track(ti.name.c_str(), ti.artist.c_str(),
+                                             ti.album.c_str(), ti.imageUrl.c_str(),
+                                             ti.duration);
+                    cspot_ui_state_refresh_wifi();
+                    break;
+                }
+                case cspot::SpircHandler::EventType::VOLUME: {
+                    int v = std::get<int>(ev->data);
+                    uint8_t pct = (uint8_t)((v * 100 + 32767) / 65535);
+                    cspot_ui_state_set_volume(pct);
                     break;
                 }
                 case cspot::SpircHandler::EventType::FLUSH:
                 case cspot::SpircHandler::EventType::SEEK:
                     ESP_LOGI(TAG, "event FLUSH/SEEK — emptyBuffer");
                     _buf->emptyBuffer();
+                    if (ev->eventType == cspot::SpircHandler::EventType::SEEK) {
+                        cspot_ui_state_set_position(std::get<int>(ev->data));
+                    }
                     break;
                 case cspot::SpircHandler::EventType::PLAYBACK_START:
                     // Do NOT emptyBuffer here: PLAYBACK_START fires at the
@@ -121,6 +146,8 @@ CSpotPlayer::CSpotPlayer(std::shared_ptr<cspot::SpircHandler> handler)
                     // but never reach the DAC.  A skip/next always means play.
                     ESP_LOGI(TAG, "event PLAYBACK_START — keep buffer, unpause");
                     _paused = false;
+                    cspot_ui_state_set_paused(false);
+                    cspot_ui_state_set_position(0);
                     break;
                 default:
                     break;
@@ -326,11 +353,13 @@ void CSpotTask::runTask() {
     auto handler = std::make_shared<cspot::SpircHandler>(ctx);
     handler->subscribeToMercury();
     auto player = std::make_shared<CSpotPlayer>(handler);
+    cspot_ui_internal::register_handler(handler.get());
 
     while (s_running) {
         ctx->session->handlePacket();
     }
 
+    cspot_ui_internal::register_handler(nullptr);
     handler->disconnect();
     ESP_LOGI(TAG, "cspot stopped");
 }
@@ -339,6 +368,7 @@ void CSpotTask::runTask() {
 extern "C" {
 
 void cspot_start(const char* device_name) {
+    cspot_ui_state_init();   // safe to call repeatedly; idempotent
     if (s_running.exchange(true)) {
         ESP_LOGW(TAG, "already running");
         return;

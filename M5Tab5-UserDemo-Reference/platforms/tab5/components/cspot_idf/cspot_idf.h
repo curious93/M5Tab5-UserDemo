@@ -12,6 +12,9 @@ bool cspot_is_running(void);
  * Used to isolate: silent cspot playback = Tremor issue or CDNAudioFile? */
 void tremor_selftest_run(void);
 
+/* Live UI state (track/artist/position/volume/wifi). See cspot_ui_state.h. */
+#include "cspot_ui_state.h"
+
 #ifdef __cplusplus
 }
 #endif
