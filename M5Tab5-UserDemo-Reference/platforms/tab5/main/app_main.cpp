@@ -6,6 +6,7 @@
 #include "esp_debug_helpers.h"
 #include "hal/hal_esp32.h"
 #include "cspot_idf.h"
+#include "wifi_credentials.h"
 
 static const char* TAG = "app";
 static HalEsp32 g_hal;
@@ -63,7 +64,7 @@ extern "C" void app_main(void)
     vTaskDelay(pdMS_TO_TICKS(6000));
 
     ESP_LOGI(TAG, "starting WiFi STA...");
-    g_hal.startWifiSta("Ingrid", "Loggo03!");
+    g_hal.startWifiSta(WIFI_PRIMARY_SSID, WIFI_PRIMARY_PASSWORD);
 
     // Give WiFi time to connect before cspot needs the network
     vTaskDelay(pdMS_TO_TICKS(5000));

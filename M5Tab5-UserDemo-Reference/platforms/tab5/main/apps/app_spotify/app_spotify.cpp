@@ -8,6 +8,7 @@
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "hal/hal_esp32.h"
+#include "wifi_credentials.h"
 #include <cstdio>
 
 extern HalEsp32* GetTab5Hal();
@@ -60,7 +61,7 @@ void AppSpotify::onOpen()
 {
     ESP_LOGI(TAG, "onOpen");
     buildUI();
-    GetTab5Hal()->startWifiSta("Ingrid", "Loggo03!");
+    GetTab5Hal()->startWifiSta(WIFI_PRIMARY_SSID, WIFI_PRIMARY_PASSWORD);
     cspot_start(CONFIG_CSPOT_DEVICE_NAME);
     setStatus("Waiting for Spotify…\n\nOpen Spotify on your phone or open.spotify.com\nand select \"" CONFIG_CSPOT_DEVICE_NAME "\"");
 }

@@ -1,6 +1,10 @@
 #include "CSpotTask.h"
 #include "cspot_idf.h"
 #include "cspot_ui_state.h"
+#include <esp_heap_caps.h>
+#include <esp_log.h>
+#include <freertos/FreeRTOS.h>
+#include <freertos/task.h>
 
 #include <CSpotContext.h>
 #include <LoginBlob.h>
@@ -71,6 +75,11 @@ static const char* TAG = "cspot";
 // ── global state ──────────────────────────────────────────────────────────────
 static std::unique_ptr<CSpotTask>   s_task;
 static std::atomic<bool>            s_running{false};
+
+#ifdef AUTO_SKIP_TEST
+// Set to true when PLAYBACK_START fires — auto_skip_task polls this.
+static volatile bool s_playback_started = false;
+#endif
 
 // ── CSpotPlayer ───────────────────────────────────────────────────────────────
 CSpotPlayer::CSpotPlayer(std::shared_ptr<cspot::SpircHandler> handler)
@@ -148,6 +157,9 @@ CSpotPlayer::CSpotPlayer(std::shared_ptr<cspot::SpircHandler> handler)
                     _paused = false;
                     cspot_ui_state_set_paused(false);
                     cspot_ui_state_set_position(0);
+#ifdef AUTO_SKIP_TEST
+                    s_playback_started = true;
+#endif
                     break;
                 default:
                     break;
@@ -354,6 +366,55 @@ void CSpotTask::runTask() {
     handler->subscribeToMercury();
     auto player = std::make_shared<CSpotPlayer>(handler);
     cspot_ui_internal::register_handler(handler.get());
+
+    // Periodischer Heap-Snapshot (alle 5s) für DMA-Fragmentation-Tracking
+    auto heap_periodic_task = +[](void*) {
+        while (true) {
+            vTaskDelay(pdMS_TO_TICKS(5000));
+            multi_heap_info_t dma_info;
+            heap_caps_get_info(&dma_info, MALLOC_CAP_DMA | MALLOC_CAP_INTERNAL);
+            ESP_LOGI("cspot",
+                     "[HEAP_DMA total_free=%u largest=%u alloc=%u free=%u]",
+                     (unsigned)dma_info.total_free_bytes,
+                     (unsigned)dma_info.largest_free_block,
+                     (unsigned)dma_info.allocated_blocks,
+                     (unsigned)dma_info.free_blocks);
+            multi_heap_info_t spi_info;
+            heap_caps_get_info(&spi_info, MALLOC_CAP_SPIRAM);
+            ESP_LOGI("cspot",
+                     "[HEAP_PSRAM total_free=%u largest=%u]",
+                     (unsigned)spi_info.total_free_bytes,
+                     (unsigned)spi_info.largest_free_block);
+        }
+    };
+    xTaskCreate(heap_periodic_task, "heap_mon", 3072, nullptr, 1, nullptr);
+
+#ifdef AUTO_SKIP_TEST
+    // Auto-Skip-Test: waits for real playback (PLAYBACK_START event) then
+    // fires 10x nextSong() at 8s intervals to measure real CDN skip latency.
+    static auto* test_handler_ptr = handler.get();
+    auto auto_skip_task = +[](void*) {
+        ESP_LOGI("cspot", "[AUTO_SKIP_TEST waiting for playback...]");
+        // Poll up to 5 minutes for Spotify to connect and play a track.
+        for (int s = 0; s < 300 && !s_playback_started; s++) {
+            vTaskDelay(pdMS_TO_TICKS(1000));
+        }
+        if (!s_playback_started) {
+            ESP_LOGI("cspot", "[AUTO_SKIP_TEST timeout — no playback after 5min]");
+            vTaskDelete(nullptr);
+            return;
+        }
+        vTaskDelay(pdMS_TO_TICKS(5000));  // let the first track play 5s
+        ESP_LOGI("cspot", "[AUTO_SKIP_TEST start n=10 interval=8s]");
+        for (int i = 0; i < 10; i++) {
+            test_handler_ptr->nextSong();
+            vTaskDelay(pdMS_TO_TICKS(8000));
+        }
+        ESP_LOGI("cspot", "[AUTO_SKIP_TEST done]");
+        vTaskDelete(nullptr);
+    };
+    xTaskCreate(auto_skip_task, "auto_skip", 4096, nullptr, 5, nullptr);
+#endif
 
     while (s_running) {
         ctx->session->handlePacket();

@@ -20,6 +20,9 @@
 #include <esp_http_server.h>
 #include <lwip/dns.h>
 #include <lwip/ip_addr.h>
+#include <lwip/sockets.h>
+#include <lwip/netdb.h>
+#include <esp_timer.h>
 
 #define TAG "wifi"
 
@@ -29,6 +32,53 @@
 
 // ── STA event handling ────────────────────────────────────────────────────────
 static volatile bool s_sta_connected = false;
+
+// Internet-Sanity-Check: TCP-Connect zu mehreren Endpoints
+// Ergebnis als Sentinel im Log: [INET_CHECK <host>:<port> took=Xms <OK|FAIL rc=N>]
+static void inet_sanity_check_task(void* arg) {
+    struct { const char* host; int port; } targets[] = {
+        {"1.1.1.1",                 80},   // Cloudflare HTTP (sollte immer gehen)
+        {"1.1.1.1",                443},   // Cloudflare HTTPS (Port 443 generisch)
+        {"connectivitycheck.gstatic.com", 80},  // Google Captive-Portal-Check
+        {"apresolve.spotify.com",  443},   // unser eigentliches Ziel
+    };
+    vTaskDelay(pdMS_TO_TICKS(2000));  // kurz warten bis Routing stabil
+    for (size_t i = 0; i < sizeof(targets)/sizeof(targets[0]); i++) {
+        struct addrinfo hints = {};
+        hints.ai_family = AF_INET;
+        hints.ai_socktype = SOCK_STREAM;
+        struct addrinfo* res = nullptr;
+        char port_s[8]; snprintf(port_s, sizeof(port_s), "%d", targets[i].port);
+        int64_t t0 = esp_timer_get_time();
+        int rc = getaddrinfo(targets[i].host, port_s, &hints, &res);
+        int dns_ms = (int)((esp_timer_get_time() - t0) / 1000);
+        if (rc != 0 || !res) {
+            ESP_LOGE(TAG, "[INET_CHECK %s:%d dns_took=%dms DNS_FAIL rc=%d]",
+                     targets[i].host, targets[i].port, dns_ms, rc);
+            continue;
+        }
+        ESP_LOGI(TAG, "[INET_CHECK %s:%d dns_took=%dms DNS_OK]",
+                 targets[i].host, targets[i].port, dns_ms);
+        int sock = socket(res->ai_family, res->ai_socktype, res->ai_protocol);
+        if (sock < 0) { freeaddrinfo(res); continue; }
+        struct timeval tv = {.tv_sec = 5, .tv_usec = 0};
+        setsockopt(sock, SOL_SOCKET, SO_SNDTIMEO, &tv, sizeof(tv));
+        setsockopt(sock, SOL_SOCKET, SO_RCVTIMEO, &tv, sizeof(tv));
+        int64_t c0 = esp_timer_get_time();
+        int crc = connect(sock, res->ai_addr, res->ai_addrlen);
+        int conn_ms = (int)((esp_timer_get_time() - c0) / 1000);
+        if (crc == 0) {
+            ESP_LOGI(TAG, "[INET_CHECK %s:%d tcp_took=%dms OK]",
+                     targets[i].host, targets[i].port, conn_ms);
+        } else {
+            ESP_LOGE(TAG, "[INET_CHECK %s:%d tcp_took=%dms FAIL errno=%d]",
+                     targets[i].host, targets[i].port, conn_ms, errno);
+        }
+        close(sock);
+        freeaddrinfo(res);
+    }
+    vTaskDelete(NULL);
+}
 
 static void sta_event_handler(void* arg, esp_event_base_t base,
                                int32_t id, void* data)
@@ -42,15 +92,17 @@ static void sta_event_handler(void* arg, esp_event_base_t base,
     } else if (base == IP_EVENT && id == IP_EVENT_STA_GOT_IP) {
         auto* ev = static_cast<ip_event_got_ip_t*>(data);
         ESP_LOGI(TAG, "STA got IP: " IPSTR, IP2STR(&ev->ip_info.ip));
-        // Explicitly set Google DNS — ESP-Hosted sometimes doesn't propagate
-        // the DHCP-provided DNS server to lwIP
+        // Explicitly set Cloudflare DNS — manche Heim-Router filtern Google DNS
+        // ESP-Hosted propagiert DHCP-DNS oft nicht zu lwIP
         ip_addr_t dns1, dns2;
-        IP_ADDR4(&dns1, 8, 8, 8, 8);
-        IP_ADDR4(&dns2, 8, 8, 4, 4);
+        IP_ADDR4(&dns1, 1, 1, 1, 1);   // Cloudflare primary
+        IP_ADDR4(&dns2, 1, 0, 0, 1);   // Cloudflare secondary
         dns_setserver(0, &dns1);
         dns_setserver(1, &dns2);
-        ESP_LOGI(TAG, "DNS set to 8.8.8.8 / 8.8.4.4");
+        ESP_LOGI(TAG, "DNS set to 1.1.1.1 / 1.0.0.1");
         s_sta_connected = true;
+        // Internet-Sanity-Check kicken
+        xTaskCreate(inet_sanity_check_task, "inet_check", 8192, nullptr, 5, nullptr);
     }
 }
 

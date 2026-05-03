@@ -17,6 +17,12 @@ idf_component_register(
     EMBED_FILES test_tone.ogg
 )
 
+# Optional: AUTO_SKIP_TEST — Build mit `idf.py build -DAUTO_SKIP_TEST=1`
+if(AUTO_SKIP_TEST)
+    target_compile_definitions(${COMPONENT_LIB} PRIVATE AUTO_SKIP_TEST=1)
+    message(STATUS "AUTO_SKIP_TEST enabled — cspot will trigger 10 nextSong() automatically")
+endif()
+
 # Bell options — set BEFORE add_subdirectory so they propagate
 # Note: use FORCE to override any cached values from previous builds
 set(BELL_DISABLE_SINKS ON CACHE BOOL "" FORCE)
