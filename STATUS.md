@@ -81,7 +81,7 @@ DMA-Min: 18075 bytes (DMA-Heap stabil beim Streaming)
 - **H2 verbessert (2026-05-03)**: Host-Level Connection Reuse implementiert. Beweisen: 21 H2_REUSE Events in Echttest.
 - **Echter Bottleneck: CDN-Download-Rate** — 256KB bei 50-90KB/s = 3-10s. H4 (Prefetching) wird das adressieren.
 
-## H1-H4 Status
+## H1-H5 Status
 
 | H | Was | Status |
 |---|---|---|
@@ -89,6 +89,7 @@ DMA-Min: 18075 bytes (DMA-Heap stabil beim Streaming)
 | H2 | HTTP Connection-Pool | **DONE (2026-05-03)**: Host-Level Reuse, 21 Reuses pro Session |
 | H3 | mbedTLS-Buffer-Reduktion | **BLOCKIERT**: 16KB DMA/TLS-Conn, PRELOAD>2 bräuchte 40KB DMA → impossible ohne DYNAMIC_BUFFER |
 | H4 | Next-Track CDN Prefetch | **DONE (2026-05-04)**: 0 PREFETCH_HIT bei Skips — hilft nur bei EoT (natürliches Track-Ende) |
+| H5 | STREAM_START_THRESHOLD 256→128 KB | **DONE (2026-05-04)**: max -37% (8033→5055ms), keine Underruns, DMA min 14731 bytes |
 | H4b | StreamBuffer-Architektur | **NÄCHSTER KANDIDAT** für manuelle Skip-Latenz <2s |
 
 ### H4 Ergebnis (2026-05-04, Session h4_2026-05-04_002714)
@@ -110,8 +111,21 @@ DMA-Fragmentierung:
   Risiko: nach vielen Skips könnte DMA <4KB → nächste TLS-Conn schlägt fehl
 ```
 
-**Skip-Floor heute:** ~2s (= 256 KB bei 127 KB/s). Reduzierung nur möglich durch:
-1. `STREAM_START_THRESHOLD` senken: 256→64 KB → ~0.5s floor (Risiko: Audio-Underrun)
+### H5 — STREAM_START_THRESHOLD 128KB + DYNAMIC_BUFFER (2026-05-04, Session thresh128)
+
+```
+CDN-Ladezeit 128KB-Threshold:
+  n=10  min=2224ms  median=3770ms  p95=5055ms  max=5055ms
+  Underruns: 0
+  DMA-min: 14731 bytes (vs 6371 bytes ohne DYNAMIC_BUFFER — 2.3× mehr Spielraum)
+
+vs H4-Baseline (256KB-Threshold):
+  max -37% (8033ms → 5055ms)
+  DMA +131% margin (6371 → 14731 bytes)
+```
+
+**Skip-Floor heute:** ~2s (128KB / ~64 KB/s). Reduzierung unter 2s nur möglich durch:
+1. `STREAM_START_THRESHOLD` weiter senken: 128→64 KB → ~1s floor (Underrun-Risiko bei schlechtem WiFi)
 2. H4b StreamBuffer: Nächster Track BEREITS im RAM wenn Skip kommt (hoher Aufwand)
 
 ## H2-Verbesserung (2026-05-03) — Was wurde geändert
