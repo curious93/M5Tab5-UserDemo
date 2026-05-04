@@ -61,6 +61,10 @@ def load_session(name):
                        re.finditer(r"\[CDN_STALL_END waited=(\d+)", text)]
         out["stall_n"] = len(stall_waits)
         out["stall_max_ms"] = max(stall_waits) if stall_waits else 0
+        # Empirical threshold calibration: max byte offset per track (TRACK_DTOR)
+        max_needs = [int(m.group(1)) for m in
+                     re.finditer(r"\[TRACK_DTOR [^]]*maxNeed=(\d+)KB", text)]
+        out["max_need_kb"] = max(max_needs) if max_needs else None
     return out
 
 
