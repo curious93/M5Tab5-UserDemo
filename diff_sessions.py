@@ -65,6 +65,16 @@ def load_session(name):
         max_needs = [int(m.group(1)) for m in
                      re.finditer(r"\[TRACK_DTOR [^]]*maxNeed=(\d+)KB", text)]
         out["max_need_kb"] = max(max_needs) if max_needs else None
+        # CDN throughput (CDN_DONE sentinel) — explains TRACK_LOAD variance
+        cdn_kbps = [int(m.group(1)) for m in
+                    re.finditer(r"\[CDN_DONE kbps=(\d+)", text)]
+        if cdn_kbps:
+            cdn_kbps.sort()
+            out["cdn_kbps"] = {
+                "n": len(cdn_kbps),
+                "median": cdn_kbps[len(cdn_kbps) // 2],
+                "min": cdn_kbps[0]
+            }
         # SKIP_REQ → AUDIO_START latency (ESP timer in parentheses: "(XXXXX)")
         # Correlate by finding consecutive SKIP_REQ + AUDIO_START pairs.
         skip_req_times = [int(m.group(1)) for m in
