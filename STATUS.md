@@ -1,4 +1,4 @@
-# M5_3 Status (2026-05-04, H4 getestet)
+# M5_3 Status (2026-05-04, 64KB Threshold — Skip -63%)
 
 ## Vollautonomes Setup — alles läuft
 
@@ -81,16 +81,17 @@ DMA-Min: 18075 bytes (DMA-Heap stabil beim Streaming)
 - **H2 verbessert (2026-05-03)**: Host-Level Connection Reuse implementiert. Beweisen: 21 H2_REUSE Events in Echttest.
 - **Echter Bottleneck: CDN-Download-Rate** — 256KB bei 50-90KB/s = 3-10s. H4 (Prefetching) wird das adressieren.
 
-## H1-H5 Status
+## H1-H6 Status
 
 | H | Was | Status |
 |---|---|---|
-| H1 | DNS-Cache | DNS <30ms, geringer Hebel. Skip-Floor bleibt ~2s wegen CDN-Download |
-| H2 | HTTP Connection-Pool | **DONE (2026-05-03)**: Host-Level Reuse, 21 Reuses pro Session |
-| H3 | mbedTLS-Buffer-Reduktion | **BLOCKIERT**: 16KB DMA/TLS-Conn, PRELOAD>2 bräuchte 40KB DMA → impossible ohne DYNAMIC_BUFFER |
-| H4 | Next-Track CDN Prefetch | **DONE (2026-05-04)**: 0 PREFETCH_HIT bei Skips — hilft nur bei EoT (natürliches Track-Ende) |
-| H5 | STREAM_START_THRESHOLD 256→128 KB | **DONE (2026-05-04)**: max -37% (8033→5055ms), keine Underruns, DMA min 14731 bytes |
-| H4b | StreamBuffer-Architektur | **NÄCHSTER KANDIDAT** für manuelle Skip-Latenz <2s |
+| H1 | DNS-Cache | DNS <30ms, geringer Hebel |
+| H2 | HTTP Connection-Pool | **DONE (2026-05-03)**: Host-Level Reuse, 21 Reuses/Session |
+| H3 | mbedTLS-Buffer-Reduktion | **BLOCKIERT**: PRELOAD>2 bräuchte 40KB DMA → impossible |
+| H4 | Next-Track CDN Prefetch | **DONE (2026-05-04)**: hilft nur EoT. Bug fixed: abort guard added |
+| H5 | STREAM_START_THRESHOLD 256→128 KB | **DONE (2026-05-04)**: max -37%, DMA safe |
+| H6 | STREAM_START_THRESHOLD 128→64 KB | **DONE (2026-05-04)**: median -43%, max -34%, 0 underruns |
+| H4b | StreamBuffer-Architektur | Nächster Kandidat für sub-1.3s Skip, hoher Aufwand |
 
 ### H4 Ergebnis (2026-05-04, Session h4_2026-05-04_002714)
 
@@ -124,9 +125,22 @@ vs H4-Baseline (256KB-Threshold):
   DMA +131% margin (6371 → 14731 bytes)
 ```
 
-**Skip-Floor heute:** ~2s (128KB / ~64 KB/s). Reduzierung unter 2s nur möglich durch:
-1. `STREAM_START_THRESHOLD` weiter senken: 128→64 KB → ~1s floor (Underrun-Risiko bei schlechtem WiFi)
-2. H4b StreamBuffer: Nächster Track BEREITS im RAM wenn Skip kommt (hoher Aufwand)
+### H6 — STREAM_START_THRESHOLD 64KB + Abort Guard Bug Fix (2026-05-04, Session thresh64_fixed)
+
+```
+CDN-Ladezeit 64KB-Threshold:
+  n=10  min=1335ms  median=2144ms  p95=3340ms  max=3340ms
+  Underruns: 0  Stack-Overflows: 0  DMA-min: 18075 bytes
+
+vs 128KB-Baseline:     median -43%  max -34%
+vs 256KB-Baseline:     median -63%  max -68%
+```
+
+**Bug gefunden & gefixt:** CDNAudioFile `downloadTaskEntry()` feuerte Prefetch-Callback auch bei `dlAbort=true` (Skip). Callback→`prefetchAudioFile()`→`openStream()` führte TLS-Handshake auf dem 24KB cdn_dl-Stack aus → Stack Overflow. Fix: `if (cb && !aborted) cb();`
+
+**Skip-Floor heute:** ~1.3s (64KB / ~50 KB/s effektiv). Weitere Senkung riskant:
+- 32KB: bei WiFi-Schwankung unter 40 KB/s → sofortiger Underrun
+- H4b StreamBuffer: sub-1.3s möglich, aber aufwändige Architekturänderung
 
 ## H2-Verbesserung (2026-05-03) — Was wurde geändert
 
