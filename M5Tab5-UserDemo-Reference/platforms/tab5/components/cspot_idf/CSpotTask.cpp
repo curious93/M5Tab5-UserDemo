@@ -94,8 +94,11 @@ CSpotPlayer::CSpotPlayer(std::shared_ptr<cspot::SpircHandler> handler)
     _sink->setParams(48000, 2, 16);
     _sink->volumeChanged(32768);   // 50% initial volume
 
-    // 512 KB circular buffer — fits ~3 s at 44100/16/stereo
-    _buf = std::make_unique<bell::CircularBuffer>(512 * 1024);
+    // 1 MB circular buffer — fits ~5.4 s at 48000/16/stereo (192 KB/s).
+    // 512 KB (~2.7 s) was insufficient: TRACK_LOAD takes ~2 s + ov_open ~500 ms,
+    // so the buffer would dry up ~700 ms after TRACK_LOAD ready, causing a
+    // 560-612 ms AUDIO_GLITCH at every track transition during AUTO_SKIP_TEST.
+    _buf = std::make_unique<bell::CircularBuffer>(1024 * 1024);
 
     // DataCallback returns size_t (bytes consumed) and receives codec as string_view
     _handler->getTrackPlayer()->setDataCallback(
@@ -179,15 +182,30 @@ void CSpotPlayer::feedData(uint8_t* data, size_t len) {
 }
 
 void CSpotPlayer::runTask() {
-    // (Removed the cspot-runtime self-test beep — the pre-cspot Tremor
-    // self-test already proves codec health at this point, no second beep.)
     std::vector<uint8_t> chunk(2048);
+    uint32_t calls = 0;
+    uint32_t empty_streak = 0;
     while (true) {
         if (!_paused) {
             size_t n = _buf->read(chunk.data(), chunk.size());
             if (n > 0) {
+                if (empty_streak > 0) {
+                    ESP_LOGW("CSpotPlayer", "[BUF_REFILL after_empty=%lums size=%u/%u]",
+                             (unsigned long)(empty_streak * 10),
+                             (unsigned)_buf->size(), (unsigned)_buf->capacity());
+                    empty_streak = 0;
+                }
                 _sink->feedPCMFrames(chunk.data(), n);
+                if ((++calls & 0xFF) == 0) {
+                    ESP_LOGI("CSpotPlayer", "[BUF_FILL size=%u/%u (%u%%)]",
+                             (unsigned)_buf->size(), (unsigned)_buf->capacity(),
+                             (unsigned)(_buf->size() * 100 / _buf->capacity()));
+                }
             } else {
+                empty_streak++;
+                if (empty_streak == 1) {
+                    ESP_LOGW("CSpotPlayer", "[BUF_EMPTY size=%u]", (unsigned)_buf->size());
+                }
                 BELL_SLEEP_MS(10);
             }
         } else {

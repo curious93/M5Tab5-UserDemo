@@ -11,6 +11,56 @@ Format pro Eintrag:
 
 ---
 
+## 2026-05-04 — Audio-Stutter Root Cause: I2S ISR Priority
+
+**Symptom:** Music plays cleanly within a track, but at every track transition (especially during AUTO_SKIP_TEST every 8s), audio stutters with 100-950ms gaps. User reports "ruckelt manchmal".
+
+**Failed hypotheses (all disproved by data):**
+1. `cdn_dl` task priority (5→3): no effect
+2. `cdn_dl` core pinning (NO_AFFINITY → core 0): minor effect only
+3. CircularBuffer too small (512KB→1MB): zero effect — BUF_FILL sentinel showed buffer at 67-100% during glitches
+4. `FLUSH/SEEK` event clearing buffer: doesn't fire on skips (verified via grep on serial log)
+
+**Verified root cause:** Default I2S ISR priority is `ESP_INTR_FLAG_LOWMED` (level 1-3). WiFi/TCP ISRs at higher levels delayed I2S DMA ISR by 100-500+ms during CDN download bursts. With only 31ms default DMA headroom (6 desc × 256 frames × 4B), DMA drained empty before ISR ran → `i2s_write` blocked waiting for buffer space → audible glitch.
+
+**Diagnostic chain (data-driven):**
+1. Added `BUF_FILL`/`BUF_EMPTY` sentinels in CSpotPlayer::runTask → ruled out buffer drain
+2. Added `I2S_SLOW` sentinel around `codec->i2s_write` in Tab5AudioSink → found 1:1 correlation between `write_ms=311ms` and `AUDIO_GLITCH gap=530ms`
+3. Increased `dma_desc_num` 6→16 → reduced glitch FREQUENCY (small stalls now fit in 85ms headroom) but big stalls (300-500ms) still hit
+4. Set `chan_cfg.intr_priority = 5` in `bsp_audio_init` → I2S_SLOW dropped from 22 to 2, AUDIO_GLITCH from 10 to 1
+
+**Fix applied:** `M5Tab5-UserDemo-Reference/platforms/tab5/components/m5stack_tab5/m5stack_tab5.c` — `bsp_audio_init`:
+- `chan_cfg.dma_desc_num = 16` (default 6)
+- `chan_cfg.intr_priority = 5` (default 0/LOWMED)
+
+**Side effect to watch:** DMA budget tighter. `dma_largest=816` observed during CDN burst with 16 desc. Acceptable but monitor.
+
+**Lehre für die Zukunft:**
+- Bei Audio-Stutter IMMER zuerst `i2s_write` selbst messen, nicht nur den Buffer/Decoder
+- ESP-IDF default I2S ISR priority ist zu niedrig wenn WiFi parallel läuft
+- 1:1-Korrelation zwischen Sentinel A und Sentinel B ist Beweis, nicht Indiz
+
+---
+
+## 2026-05-04 — cdn_dl Stack Overflow von std::regex auf Spotify-CDN-URLs
+
+**Symptom:** Nach intr_priority=5 Fix: Gerät crasht mit `Guru Meditation: Stack protection fault` in `cdn_dl` task wenige Sekunden nach Track-Skip / Track-Load.
+
+**Falsche initial-Hypothese:** ISR-Frames auf cdn_dl Stack durch erhöhte I2S ISR-Frequenz overflownen den 24KB Stack.
+
+**Tatsächlicher Root Cause (verifiziert via addr2line):** `bell::URLParser::parse()` ruft `std::regex_match` mit dem Regex `^(?:([^:/?#]+):)?(?://([^/?#]*))?([^?#]*)(\\?(?:[^#]*))?(#(?:.*))?` auf Spotify-CDN-URLs (200+ chars mit `__token__=...&hmac=...&...` query params). std::regex DFS-Backtracking rekursiert tief — `_M_dfs` self-recursion ~32+ Frames sichtbar im Stack-Dump, jeder Frame ~32 Bytes → >1KB pro Rekursionsstufe → 24KB Stack overflowed.
+
+**Fix:** `cspot/bell/CMakeLists.txt:31` — `BELL_DISABLE_REGEX` von `OFF` auf `ON`. URLParser fällt zurück auf manuelle `parse()` mit sscanf+strstr ohne Rekursion. Auch `<cstring>` include zu URLParser.cpp hinzugefügt (war fehlend in der bestehenden Fallback-Implementierung).
+
+**War kein Regression von intr_priority=5** — pre-existing latent bug. Wahrscheinlich vorher seltener getriggert oder hat sich in andere Crashes versteckt.
+
+**Lehre:**
+- `std::regex` auf Embedded mit kleinem Stack ist Russisch Roulette — IMMER `BELL_DISABLE_REGEX=ON` für Embedded-Builds
+- Stack-Dump mit repetitivem RA/PC-Pattern = Rekursion, nicht ISR-Overhead
+- `addr2line` mit korrektem Pfad (`~/.espressif/tools/riscv32-esp-elf/.../riscv32-esp-elf-addr2line`) ist essentiell für Crash-Diagnose
+
+---
+
 ## 2026-04-28 — MAX_TRACKS_PRELOAD=2 (a8a047c, 8cc311a) → reverted
 
 ### Commits

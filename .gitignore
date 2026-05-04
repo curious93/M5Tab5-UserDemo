@@ -16,3 +16,5 @@ boot_log.txt
 flash_env/lib/python3.9/site-packages/pyserial*
 flash_env/lib/python3.9/site-packages/serial/
 flash_env/bin/pyserial-*
+wifi_credentials.h
+sessions/

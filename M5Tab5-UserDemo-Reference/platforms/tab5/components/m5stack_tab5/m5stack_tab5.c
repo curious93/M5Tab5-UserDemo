@@ -747,6 +747,12 @@ esp_err_t bsp_audio_init(const i2s_std_config_t* i2s_config)
     /* Setup I2S peripheral */
     i2s_chan_config_t chan_cfg = I2S_CHANNEL_DEFAULT_CONFIG(CONFIG_BSP_I2S_NUM, I2S_ROLE_MASTER);
     chan_cfg.auto_clear        = true;  // Auto clear the legacy data in the DMA buffer
+    chan_cfg.dma_desc_num      = 16;    // 6→16: 85 ms DMA headroom (was 31 ms),
+                                        // covers up to 300 ms i2s_write stalls
+                                        // observed during CDN download bursts.
+    chan_cfg.intr_priority     = 5;     // High prio: I2S DMA ISR must not be
+                                        // delayed by WiFi/other ISRs > 85 ms
+                                        // or audio glitches occur.
     ESP_ERROR_CHECK(i2s_new_channel(&chan_cfg, &i2s_tx_chan, &i2s_rx_chan));
 
     /* Setup I2S channels */

@@ -133,8 +133,14 @@ void Tab5AudioSink::feedPCMFrames(const uint8_t* buffer, size_t bytes) {
     }
 
     size_t written = 0;
+    uint64_t i2s_t0 = esp_timer_get_time();
     esp_err_t err = codec->i2s_write((void*)outBuf, outFrames * 4,
                                      &written, portMAX_DELAY);
+    uint32_t i2s_dur_ms = (uint32_t)((esp_timer_get_time() - i2s_t0) / 1000);
+    if (i2s_dur_ms > 30) {
+        ESP_LOGW(TAG, "[I2S_SLOW write_ms=%lu bytes=%u]",
+                 (unsigned long)i2s_dur_ms, (unsigned)(outFrames * 4));
+    }
     s_total_written += written;
 
     if ((++s_frames_called & 0x1F) == 0) {  // every 32 calls (~350 ms @ 48 kHz)
