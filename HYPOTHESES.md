@@ -178,3 +178,23 @@ Vor jeder Hypothesen-Implementation **erst messen** — die Sentinels sagen welc
 ## Was Klasse-B (gesperrt)
 
 `MAX_TRACKS_PRELOAD>1` bleibt **gesperrt** bis H3 erfolgreich (siehe POSTMORTEMS.md).
+
+---
+
+## H7: STREAM_START_THRESHOLD = 96 KB (2026-05-04)
+
+**Status:** TESTING
+
+**Rationale:** Observed max Vorbis setup header = 65,703 bytes (from quality session with 64KB threshold).
+96KB = 98,304 bytes → 32KB margin over observed max ≈ 800ms buffer at 40KB/s.
+128KB was safe but adds ~800ms of unnecessary wait vs 96KB.
+
+**Expected change vs 128KB baseline:**
+- Median: 3770ms → ~3100ms (-18%)
+- Max: 5055ms → ~4100ms (-19%)
+- CDN_STALL: 0 (if no track has setup header >96KB)
+
+**Abort condition:** ANY [CDN_STALL] → revert to 128KB, document max observed header size.
+
+**Changes:**
+- CDNAudioFile.h:106 — STREAM_START_THRESHOLD = 96 * 1024
