@@ -1,3 +1,17 @@
+// =============================================================================
+// DEPRECATED — DO NOT BUILD OR EDIT THIS FILE
+// =============================================================================
+// This is an old PlatformIO/M5Unified test from before the ESP-IDF migration.
+// The active entry point for the Spotify Streamer is:
+//
+//     platforms/tab5/main/app_main.cpp
+//
+// PlatformIO/M5Unified is INCOMPATIBLE with the Tab5 Rev 1.3 hardware (PI4IOE
+// IO-Expander not initialized → display stays black). See Claude.md §6.
+//
+// File kept only because deletion confused historical git operations.
+// =============================================================================
+#if 0
 #include <M5Unified.h>
 
 void setup() {
@@ -40,3 +54,4 @@ void loop() {
     
     delay(10);
 }
+#endif
