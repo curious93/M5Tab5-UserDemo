@@ -65,6 +65,28 @@ def load_session(name):
         max_needs = [int(m.group(1)) for m in
                      re.finditer(r"\[TRACK_DTOR [^]]*maxNeed=(\d+)KB", text)]
         out["max_need_kb"] = max(max_needs) if max_needs else None
+        # SKIP_REQ → AUDIO_START latency (ESP timer in parentheses: "(XXXXX)")
+        # Correlate by finding consecutive SKIP_REQ + AUDIO_START pairs.
+        skip_req_times = [int(m.group(1)) for m in
+                          re.finditer(r"\((\d+)\) [^\n]*\[SKIP_REQ", text)]
+        audio_start_times = [int(m.group(1)) for m in
+                             re.finditer(r"\((\d+)\) [^\n]*\[AUDIO_START\]", text)]
+        if skip_req_times and audio_start_times:
+            latencies = []
+            ai = 0
+            for st in skip_req_times:
+                while ai < len(audio_start_times) and audio_start_times[ai] <= st:
+                    ai += 1
+                if ai < len(audio_start_times):
+                    latencies.append(audio_start_times[ai] - st)
+                    ai += 1
+            if latencies:
+                latencies.sort()
+                out["audio_latency_ms"] = {
+                    "n": len(latencies),
+                    "median": latencies[len(latencies) // 2],
+                    "max": latencies[-1]
+                }
     return out
 
 

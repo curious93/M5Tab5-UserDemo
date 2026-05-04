@@ -34,8 +34,9 @@ bool Tab5AudioSink::setParams(uint32_t sampleRate, uint8_t channelCount, uint8_t
     // tests: writes returned err=0x0 + all bytes "written" but no sound.
     if (codec->set_volume) codec->set_volume(30);
     if (codec->set_mute)   codec->set_mute(false);
-    // Reset PCM gap timer on new track so inter-track silence isn't flagged as a glitch.
+    // Reset PCM gap timer and frame counter on new track.
     s_last_feed_us = 0;
+    s_frames_called = 0;
     esp_err_t ret = codec->i2s_reconfig_clk_fn(sampleRate, bitDepth, slotMode);
     if (ret != ESP_OK) {
         ESP_LOGE(TAG, "i2s_reconfig_clk_fn failed: %s", esp_err_to_name(ret));
@@ -47,9 +48,13 @@ bool Tab5AudioSink::setParams(uint32_t sampleRate, uint8_t channelCount, uint8_t
 }
 
 void Tab5AudioSink::feedPCMFrames(const uint8_t* buffer, size_t bytes) {
+    uint64_t now_us = esp_timer_get_time();
+    // First frame of a new track — emit AUDIO_START for skip-to-audio latency measurement.
+    if (s_frames_called == 0) {
+        ESP_LOGI(TAG, "[AUDIO_START]");
+    }
     // Detect gaps in PCM feed — a gap > 80 ms means the Vorbis decoder stalled
     // (CDN data not ready), causing an audible glitch in the output.
-    uint64_t now_us = esp_timer_get_time();
     if (s_last_feed_us > 0) {
         uint32_t gap_ms = (uint32_t)((now_us - s_last_feed_us) / 1000);
         if (gap_ms > 80) {
