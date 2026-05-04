@@ -81,3 +81,52 @@ Während Audio-Wiedergabe (zu messen): vermutlich noch weniger DMA frei.
 ### Was nötig wäre für erneuten Versuch
 <Konkrete Schritte: messen, isolieren, vergleichen, dann erneut probieren>
 ```
+
+---
+
+## 2026-05-04 — STREAM_START_THRESHOLD 64KB (H6) — immediate CDN stall on all tracks
+
+### Commits
+- H6 test: STREAM_START_THRESHOLD 64*1024 in CDNAudioFile.h
+- Reverted same session after quality monitoring confirmed severe stutter
+
+### Hypothese
+Reducing threshold to 64KB (from 128KB) would allow Vorbis decode to start earlier,
+reducing skip latency (median was 5805ms at 128KB). Expected: median <2500ms with zero CDN stalls.
+
+### Symptom
+Confirmed: median skip -63% (5805→2144ms). But audio quality session revealed severe stutter:
+- [CDN_STALL need=65703 have=65536 gap=0 KB] immediately on first track decode call
+- [CDN_STALL_END waited=Xms] after stall resolved
+- [AUDIO_GLITCH gap=Xms] audible stutter on virtually every track
+
+### Root Cause
+Vorbis setup headers (containing codebooks) for some Spotify tracks reach 65,703 bytes —
+167 bytes past the 65,536-byte (64KB) boundary. The Vorbis decoder's ov_open_callbacks()
+performs several sequential seeks into the setup header during initialization. When the
+threshold is exactly 64KB, readBytes() delivers data up to byte 65,536, then blocks
+immediately because byte 65,537 onwards hasn't been downloaded yet.
+This manifests as a CDN stall within milliseconds of decode starting, causing an audible
+gap in output > 80ms.
+
+### Root Cause (abort guard)
+Separate bug uncovered during H6 testing: when a skip fires while a CDN download is in
+progress, CDNAudioFile's destructor sets dlAbort=true and the download task continues
+running on its 24KB stack. The original code fired downloadCompleteCallback regardless of
+abort state. That callback → prefetchAudioFile() → CDNAudioFile::openStream() → TLS
+handshake all ran on the cdn_dl task's 24KB stack → stack overflow crash.
+Fix: `if (cb && !aborted) cb()` — abort guard before firing prefetch callback.
+(Fix committed in 1310bb3, permanent — no revert needed.)
+
+### What's needed for re-attempt
+64KB cannot work because Spotify's Vorbis format allows setup headers up to ~96KB.
+Any threshold below ~96KB risks this stall. Verified threshold: 128KB (zero stalls in
+thresh128 quality session, confirmed by [CDN_STALL] sentinel absence).
+
+To reduce skip latency without lowering the threshold:
+- H4b: CDN connection pooling — reuse TLS connection across tracks (currently ~155ms TLS
+  per track regardless of threshold)
+- H3: Audio buffer pre-allocation (DMA pool) to reduce per-track malloc cost
+- H7 (future): Investigate Vorbis-format-specific header prefetch to speed up ov_open
+
+**Klassifizierung:** THRESHOLD<128KB → Klasse B (GESPERRT). Verwende immer ≥128KB.
