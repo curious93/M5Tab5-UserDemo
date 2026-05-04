@@ -206,3 +206,52 @@ M5_3/
 ## Was während dieser Session passierte
 
 Vollautonom: 7 Build-Iterationen, 9 Flash-Iterationen, 5 große Code-Patches (TLS-Sentinel in TLSSocket.cpp, INET_CHECK in hal_wifi.cpp, Auto-Skip-Test in CSpotTask.cpp, Cloudflare-DNS Switch, WLAN-Bug Fix), 1 Component-Move (esp_hosted nach components/), 1 settings.json Permission-Fix, 7 Sentinel-Definitionen, 6 Doku-Files (Claude.md, POSTMORTEMS.md, HYPOTHESES.md, WORKFLOW.md, NETWORK_DIAGNOSIS.md, STATUS.md), 2 Aggregator-Bugs gefunden + gefixt, Anti-Pattern Compile-Assert (verifiziert dass es feuert).
+
+---
+
+## Session 2026-05-04 — Monitoring-Verbesserungen + H7/H8/AUDIO_START
+
+### Was erledigt wurde
+
+**Firmware-Änderungen (alle committed, geflasht):**
+- `[AUDIO_GLITCH gap=Xms]` — Sentinel wenn feedPCMFrames()-Lücke > 80ms (Tab5AudioSink.cpp)
+- `[CDN_STALL need=X have=Y gap=ZKB]` + `[CDN_STALL_END waited=Xms]` — readBytes() blockiert
+- `[AUDIO_START]` — erster PCM-Frame pro Track → echte End-to-End-Latenz messbar
+- `[TRACK_DTOR ... maxNeed=XKB]` — max readBytes()-Offset pro Track (für Threshold-Kalibrierung)
+- Reset s_frames_called in setParams() so jeder Track genau ein AUDIO_START emittiert
+- Abort-Guard in downloadTaskEntry: Prefetch-Callback nur bei sauberem Abschluss (verhindert Stack-Overflow auf cdn_dl 24KB-Stack wenn Skip während Prefetch)
+- H7: STREAM_START_THRESHOLD 128KB → 96KB (CDNAudioFile.h)
+- CONFIG_MBEDTLS_DYNAMIC_BUFFER=y (sdkconfig, permanenter Fix aus Vorperiode)
+
+**Monitor-Verbesserungen (monitor_serial.py):**
+- Silence-Watchdog: 15s keine Ausgabe → `[WATCHDOG: device crash suspected]`, Exit 4
+- Crash-Pattern-Detection: Guru Meditation, stack overflow, Task watchdog etc.
+
+**build.sh-Fixes:**
+- `grep -c || echo 0` → `grep -c || true` (verhindert "0\n0" doppelten Wert)
+- Audio-Glitch + CDN-Stall-Counts in verdict.json aggregiert
+- Crash-Marker-Detection in serial.log → RESULT=FAIL
+
+**Tools:**
+- diff_sessions.py: AUDIO_GLITCH, CDN_STALL, maxNeed, AUDIO_START Spalten
+
+### Aktueller Firmware-Stand (geflasht)
+
+- STREAM_START_THRESHOLD = 96 KB (H7)
+- Alle Sentinels aktiv: AUDIO_GLITCH, CDN_STALL, AUDIO_START, TRACK_MAX_NEED
+- AUTO_SKIP_TEST: nach 5min Timeout falls keine Spotify-Session
+- MBEDTLS_DYNAMIC_BUFFER = y
+
+### Offene Messungen (brauchen Spotify-Playback)
+
+- H7 Skip-Latenz: Baseline 128KB=3770ms med, erwarte 96KB≈2800ms med
+- H7 Qualität: Erwarte 0 AUDIO_GLITCH (96KB > beobachteter Max-Header 65.7KB)
+- H8 maxNeed: Empirische Vorbis-Header-Größen aus echten Tracks
+- SKIP_REQ → AUDIO_START: echte End-to-End User-wahrgenommene Latenz
+
+### Nächste Hypothesen (datengetrieben nach Messung)
+
+- H7 bestätigen (96KB sicher + schneller als 128KB)
+- H9: 80KB Threshold (risikoreich wegen ~16KB CDN-Lead-Margin → AUDIO_GLITCH bei Slow-CDN)
+- H10: Download-Task-Self-Connect (spart ~50ms, gering, sicher)
+- H5+: Wenn maxNeed-Daten zeigen dass kein Track > 70KB braucht → Threshold auf 72KB
